@@ -364,8 +364,6 @@ Given three points A, B, C on an arc:
 - Point coordinate display and coordinate differences
 - Point-to-line distance measurement
 - Arc length measurement
-- Multiple measurement overlays (DO NOT IMPLEMENT THIS)
-- Enhanced measurement management (DO NOT IMPLEMENT THIS)
 
 ### 8.4 Phase 4: Advanced Features
 - Undo/redo system

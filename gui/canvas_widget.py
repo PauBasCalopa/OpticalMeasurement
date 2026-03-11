@@ -7,7 +7,7 @@ Custom tkinter Canvas for image display and measurement interactions
 import tkinter as tk
 from tkinter import Canvas
 from typing import Optional, List, Tuple
-from PIL import ImageTk
+from PIL import ImageTk, Image, ImageDraw, ImageFont
 import math
 
 from models.image_data import ImageData
@@ -737,17 +737,188 @@ class ImageCanvas(Canvas):
         return self.overlays_visible
     
     def export_image(self, filename: str):
-        """Export image with overlays"""
+        """Export image with overlays rendered directly onto the image"""
         if not self.current_image or not self.current_image.original_image:
             raise ValueError("No image to export")
         
-        # For now, just save the original image
-        # TODO: Implement overlay rendering
+        from core.app_state import app_state
+        
+        # Create a copy of the original image to draw on
+        export_image = self.current_image.original_image.copy()
+        draw = ImageDraw.Draw(export_image)
+        
+        # Try to load a font for text rendering
+        try:
+            # Try to use a system font (adjust path as needed)
+            font_size = max(12, min(24, int(export_image.width / 80)))  # Scale font with image size
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            try:
+                # Fallback to default font
+                font = ImageFont.load_default()
+            except:
+                font = None
+        
+        # Draw each measurement overlay on the original image
+        for measurement in app_state.measurements:
+            if not self.overlays_visible:  # Respect overlay visibility setting
+                continue
+                
+            self._draw_measurement_on_image(draw, measurement, export_image.size, font)
+        
+        # Save the annotated image
         format_ext = filename.lower().split('.')[-1]
         if format_ext == 'jpg':
             format_ext = 'jpeg'
         
-        self.current_image.original_image.save(filename, format=format_ext.upper())
+        # Save with high quality
+        if format_ext.upper() == 'JPEG':
+            export_image.save(filename, format='JPEG', quality=95, optimize=True)
+        else:
+            export_image.save(filename, format=format_ext.upper())
+    
+    def _draw_measurement_on_image(self, draw: ImageDraw.ImageDraw, measurement, image_size: tuple, font):
+        """Draw a single measurement overlay on the PIL image"""
+        # Scale line width based on image size
+        line_width = max(2, int(min(image_size) / 500))
+        
+        if measurement.measurement_type == "distance":
+            # Draw distance line
+            x1, y1 = measurement.points[0]
+            x2, y2 = measurement.points[1]
+            
+            draw.line([(x1, y1), (x2, y2)], fill="green", width=line_width)
+            
+            # Draw result text
+            mid_x = (x1 + x2) / 2
+            mid_y = (y1 + y2) / 2 - 15  # Offset text above line
+            result_text = self.measurement_engine.format_measurement_result(measurement)
+            
+            if font:
+                # Get text size for better positioning
+                bbox = draw.textbbox((0, 0), result_text, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+                
+                # Draw text background for better visibility
+                draw.rectangle([
+                    mid_x - text_width//2 - 2, mid_y - text_height//2 - 2,
+                    mid_x + text_width//2 + 2, mid_y + text_height//2 + 2
+                ], fill="white", outline="green")
+                
+                draw.text((mid_x - text_width//2, mid_y - text_height//2), result_text, 
+                         fill="green", font=font)
+            else:
+                draw.text((mid_x, mid_y), result_text, fill="green")
+        
+        elif measurement.measurement_type == "radius":
+            # Draw radius circle
+            if hasattr(measurement, 'center_point') and measurement.center_point:
+                center_x, center_y = measurement.center_point
+                
+                # Calculate radius in pixels
+                if self.measurement_engine.calibration:
+                    radius_pixels = measurement.result / self.measurement_engine.calibration.scale_factor
+                else:
+                    radius_pixels = measurement.result
+                
+                # Draw circle
+                draw.ellipse([
+                    center_x - radius_pixels, center_y - radius_pixels,
+                    center_x + radius_pixels, center_y + radius_pixels
+                ], outline="blue", width=line_width)
+                
+                # Draw center point
+                point_size = line_width * 2
+                draw.ellipse([
+                    center_x - point_size, center_y - point_size,
+                    center_x + point_size, center_y + point_size
+                ], fill="blue")
+                
+                # Draw result text
+                result_text = self.measurement_engine.format_measurement_result(measurement)
+                text_y = center_y - radius_pixels - 20
+                
+                if font:
+                    bbox = draw.textbbox((0, 0), result_text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    
+                    draw.rectangle([
+                        center_x - text_width//2 - 2, text_y - text_height//2 - 2,
+                        center_x + text_width//2 + 2, text_y + text_height//2 + 2
+                    ], fill="white", outline="blue")
+                    
+                    draw.text((center_x - text_width//2, text_y - text_height//2), result_text, 
+                             fill="blue", font=font)
+                else:
+                    draw.text((center_x, text_y), result_text, fill="blue")
+        
+        elif measurement.measurement_type == "angle":
+            # Draw angle lines
+            if len(measurement.points) >= 3:
+                vertex_x, vertex_y = measurement.points[1]  # Vertex is middle point
+                p1_x, p1_y = measurement.points[0]
+                p3_x, p3_y = measurement.points[2]
+                
+                # Draw lines from vertex
+                draw.line([(vertex_x, vertex_y), (p1_x, p1_y)], fill="orange", width=line_width)
+                draw.line([(vertex_x, vertex_y), (p3_x, p3_y)], fill="orange", width=line_width)
+                
+                # Draw result text near vertex
+                result_text = self.measurement_engine.format_measurement_result(measurement)
+                text_x = vertex_x + 20
+                text_y = vertex_y - 20
+                
+                if font:
+                    bbox = draw.textbbox((0, 0), result_text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    
+                    draw.rectangle([
+                        text_x - 2, text_y - 2,
+                        text_x + text_width + 2, text_y + text_height + 2
+                    ], fill="white", outline="orange")
+                    
+                    draw.text((text_x, text_y), result_text, fill="orange", font=font)
+                else:
+                    draw.text((text_x, text_y), result_text, fill="orange")
+        
+        elif measurement.measurement_type == "two_line_angle":
+            # Draw two lines
+            if len(measurement.points) >= 4:
+                # First line
+                line1_p1 = measurement.points[0]
+                line1_p2 = measurement.points[1]
+                
+                # Second line
+                line2_p1 = measurement.points[2]
+                line2_p2 = measurement.points[3]
+                
+                # Draw both lines
+                draw.line([line1_p1, line1_p2], fill="purple", width=line_width)
+                draw.line([line2_p1, line2_p2], fill="purple", width=line_width)
+                
+                # Draw result text in center
+                center_x = (line1_p1[0] + line1_p2[0] + line2_p1[0] + line2_p2[0]) / 4
+                center_y = (line1_p1[1] + line1_p2[1] + line2_p1[1] + line2_p2[1]) / 4 - 15
+                
+                result_text = self.measurement_engine.format_measurement_result(measurement)
+                
+                if font:
+                    bbox = draw.textbbox((0, 0), result_text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    
+                    draw.rectangle([
+                        center_x - text_width//2 - 2, center_y - text_height//2 - 2,
+                        center_x + text_width//2 + 2, center_y + text_height//2 + 2
+                    ], fill="white", outline="purple")
+                    
+                    draw.text((center_x - text_width//2, center_y - text_height//2), result_text, 
+                             fill="purple", font=font)
+                else:
+                    draw.text((center_x, center_y), result_text, fill="purple")
 
     def _try_show_calibration_dialog(self, pixel_distance: float):
         """Fallback method to show calibration dialog"""
