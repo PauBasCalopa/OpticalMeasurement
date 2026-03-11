@@ -43,6 +43,7 @@ class ImageCanvas(Canvas):
         self.actual_zoom_level: float = 1.0  # Actual zoom level (after MAX_DISPLAY_SIZE limiting)
         self.pan_start: Optional[Tuple[int, int]] = None
         self.right_pan_start: Optional[Tuple[int, int]] = None  # ? NEW: Right-click pan state
+        self.last_mouse_pos: Tuple[int, int] = (0, 0)  # ? NEW: Track mouse position for zoom-to-cursor
         
         # Overlays
         self.measurement_overlays = {}  # measurement_id -> canvas_items
@@ -159,14 +160,82 @@ class ImageCanvas(Canvas):
         self.configure(scrollregion=self.bbox("all"))
     
     def zoom_in(self):
-        """Zoom in"""
-        new_zoom = min(10.0, self.zoom_level * 1.2)
-        self.set_zoom(new_zoom)
+        """Zoom in at last mouse position or canvas center"""
+        # ? IMPROVED: Use mouse-centered zoom if available, otherwise use canvas center
+        if hasattr(self, 'last_mouse_pos') and self.last_mouse_pos != (0, 0):
+            self.zoom_at_cursor(self.last_mouse_pos[0], self.last_mouse_pos[1], zoom_in=True)
+        else:
+            # Fallback: zoom at canvas center
+            canvas_center_x = self.winfo_width() // 2
+            canvas_center_y = self.winfo_height() // 2
+            self.zoom_at_cursor(canvas_center_x, canvas_center_y, zoom_in=True)
     
     def zoom_out(self):
-        """Zoom out"""
-        new_zoom = max(0.1, self.zoom_level / 1.2)
+        """Zoom out at last mouse position or canvas center"""
+        # ? IMPROVED: Use mouse-centered zoom if available, otherwise use canvas center
+        if hasattr(self, 'last_mouse_pos') and self.last_mouse_pos != (0, 0):
+            self.zoom_at_cursor(self.last_mouse_pos[0], self.last_mouse_pos[1], zoom_in=False)
+        else:
+            # Fallback: zoom at canvas center
+            canvas_center_x = self.winfo_width() // 2
+            canvas_center_y = self.winfo_height() // 2
+            self.zoom_at_cursor(canvas_center_x, canvas_center_y, zoom_in=False)
+    
+    def zoom_at_cursor(self, cursor_x: int, cursor_y: int, zoom_in: bool):
+        """Zoom in or out while keeping the point under the cursor stationary"""
+        if not self.current_image or not self.image_id:
+            return
+        
+        # Calculate new zoom level
+        max_zoom = self.image_manager.get_max_zoom() if hasattr(self.image_manager, 'get_max_zoom') else 10.0
+        
+        if zoom_in:
+            new_zoom = min(max_zoom, self.zoom_level * 1.2)
+        else:
+            new_zoom = max(0.1, self.zoom_level / 1.2)
+        
+        # Don't zoom if we're already at the limit
+        if abs(new_zoom - self.zoom_level) < 0.01:
+            return
+        
+        # Get current image position and mouse position
+        old_image_x, old_image_y = self.coords(self.image_id)
+        
+        # Convert cursor position to image coordinates (at current zoom)
+        image_point = self.screen_to_image_coords(cursor_x, cursor_y)
+        
+        # Calculate where this image point will be at the new zoom level
+        zoom_factor = new_zoom / self.zoom_level
+        
+        # The key insight: we want the image point under the cursor to stay under the cursor
+        # So we calculate how much the image needs to move to keep that point stationary
+        
+        # Calculate the offset from image origin to cursor (in current display pixels)
+        cursor_offset_x = cursor_x - old_image_x
+        cursor_offset_y = cursor_y - old_image_y
+        
+        # After zoom, this offset will change by the zoom factor
+        new_cursor_offset_x = cursor_offset_x * zoom_factor
+        new_cursor_offset_y = cursor_offset_y * zoom_factor
+        
+        # Calculate where the image origin needs to be to keep cursor point stationary
+        new_image_x = cursor_x - new_cursor_offset_x
+        new_image_y = cursor_y - new_cursor_offset_y
+        
+        # Set new zoom level (this will update the image display)
+        old_zoom = self.zoom_level
         self.set_zoom(new_zoom)
+        
+        # Only adjust position if zoom actually changed
+        if self.zoom_level != old_zoom:
+            # Move image to calculated position
+            self.coords(self.image_id, new_image_x, new_image_y)
+            
+            # Update scroll region
+            self.configure(scrollregion=self.bbox("all"))
+            
+            # Redraw overlays at new position
+            self.redraw_all_overlays()
     
     def zoom_fit(self):
         """Zoom to fit image in canvas"""
@@ -188,8 +257,18 @@ class ImageCanvas(Canvas):
     
     def set_zoom(self, zoom_level: float):
         """Set specific zoom level"""
-        self.zoom_level = max(0.1, min(10.0, zoom_level))
+        # ? IMPROVED: Use dynamic max zoom based on image size
+        max_zoom = self.image_manager.get_max_zoom() if hasattr(self.image_manager, 'get_max_zoom') else 10.0
+        self.zoom_level = max(0.1, min(max_zoom, zoom_level))
         self.update_image_display()
+        
+        # ? DEBUG: Add zoom debugging information
+        if hasattr(self, 'image_manager') and self.image_manager.is_image_loaded:
+            debug_info = self.image_manager.get_zoom_debug_info(self.zoom_level)
+            if debug_info.get("is_limited", False):
+                print(f"?? ZOOM DEBUG: Requested {debug_info['zoom_percentage']}, "
+                      f"Actual {debug_info['actual_percentage']}, "
+                      f"Limited by {debug_info['max_display_size']}")
         
         # Notify observers
         from core.app_state import app_state
@@ -329,17 +408,18 @@ class ImageCanvas(Canvas):
     
     def on_mouse_move(self, event):
         """Handle mouse movement"""
+        # ? NEW: Track mouse position for zoom-to-cursor functionality
+        self.last_mouse_pos = (event.x, event.y)
+        
         # Update cursor position in main window
         image_coords = self.screen_to_image_coords(event.x, event.y)
         if hasattr(self.master.master, 'update_cursor_position'):
             self.master.master.update_cursor_position(int(image_coords[0]), int(image_coords[1]))
     
     def on_mousewheel(self, event):
-        """Handle mouse wheel zoom"""
-        if event.delta > 0:
-            self.zoom_in()
-        else:
-            self.zoom_out()
+        """Handle mouse wheel zoom - zoom toward cursor position"""
+        # ? IMPROVED: Zoom toward cursor instead of image center
+        self.zoom_at_cursor(event.x, event.y, event.delta > 0)
     
     def on_key_press(self, event):
         """Handle key press events"""
@@ -655,6 +735,8 @@ class ImageCanvas(Canvas):
     def get_overlays_visibility(self) -> bool:
         """Get current overlay visibility state"""
         return self.overlays_visible
+    
+    def export_image(self, filename: str):
         """Export image with overlays"""
         if not self.current_image or not self.current_image.original_image:
             raise ValueError("No image to export")

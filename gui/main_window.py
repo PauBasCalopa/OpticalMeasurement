@@ -208,7 +208,10 @@ class OpticalMeasurementApp:
             self.update_measurements_list()
             self.update_ui_state()  # ? FIX: Update UI state when measurements change
         elif change_type == "zoom_changed":
-            self.zoom_label.config(text=f"Zoom: {data*100:.0f}%")
+            # ? ENHANCED: Show zoom with max zoom info
+            max_zoom = self.canvas.image_manager.get_max_zoom() if (hasattr(self.canvas, 'image_manager') and 
+                                                                   hasattr(self.canvas.image_manager, 'get_max_zoom')) else 10.0
+            self.zoom_label.config(text=f"Zoom: {data*100:.0f}% (max: {max_zoom*100:.0f}%)")
     
     def update_ui_state(self):
         """Update UI state based on current application state"""

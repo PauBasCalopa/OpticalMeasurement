@@ -20,11 +20,13 @@ class ImageManager:
     }
     
     # Maximum display size for performance (width, height)
-    MAX_DISPLAY_SIZE = (2048, 2048)
+    # ? INCREASED: Allow higher zoom levels for detailed inspection
+    MAX_DISPLAY_SIZE = (8192, 8192)  # Increased from 2048 to support high zoom
     
     def __init__(self):
         self.current_image_data: Optional[ImageData] = None
         self._display_cache = {}  # Cache for display images at different zoom levels
+        self.max_zoom_level = 10.0  # ? NEW: Dynamic max zoom based on image size
     
     def load_image(self, file_path: str) -> ImageData:
         """Load image from file path with error handling"""
@@ -51,6 +53,9 @@ class ImageManager:
             
             # Store current image data
             self.current_image_data = image_data
+            
+            # ? NEW: Calculate dynamic max zoom based on image size
+            self._calculate_max_zoom()
             
             # Clear display cache
             self._display_cache.clear()
@@ -108,6 +113,29 @@ class ImageManager:
             print(f"Error creating PhotoImage: {e}")
             return None
     
+    def _calculate_max_zoom(self):
+        """Calculate maximum safe zoom level based on image dimensions"""
+        if not self.current_image_data:
+            self.max_zoom_level = 10.0
+            return
+        
+        width, height = self.current_image_data.original_image.size
+        
+        # Calculate max zoom that keeps image under reasonable pixel limits
+        # Allow higher zoom for smaller images, lower zoom for larger images
+        max_width_zoom = self.MAX_DISPLAY_SIZE[0] / width
+        max_height_zoom = self.MAX_DISPLAY_SIZE[1] / height
+        calculated_max = min(max_width_zoom, max_height_zoom)
+        
+        # Ensure we can zoom to at least 2x, but no more than 20x
+        self.max_zoom_level = max(2.0, min(20.0, calculated_max))
+        
+        print(f"?? ZOOM CALC: Image {width}x{height}, Max zoom: {self.max_zoom_level:.1f}x ({self.max_zoom_level*100:.0f}%)")
+    
+    def get_max_zoom(self) -> float:
+        """Get maximum zoom level for current image"""
+        return self.max_zoom_level
+    
     def _create_display_image(self, original_image: Image.Image, zoom_level: float) -> Image.Image:
         """Create optimized display image"""
         # Calculate target size
@@ -115,13 +143,25 @@ class ImageManager:
         target_width = int(original_width * zoom_level)
         target_height = int(original_height * zoom_level)
         
-        # Apply display size limits for performance
-        if target_width > self.MAX_DISPLAY_SIZE[0] or target_height > self.MAX_DISPLAY_SIZE[1]:
-            # Calculate scale factor to fit within limits
-            scale_w = self.MAX_DISPLAY_SIZE[0] / target_width
-            scale_h = self.MAX_DISPLAY_SIZE[1] / target_height
-            scale = min(scale_w, scale_h)
+        # ? IMPROVED: Better high-zoom handling with performance considerations
+        max_pixels = self.MAX_DISPLAY_SIZE[0] * self.MAX_DISPLAY_SIZE[1]
+        target_pixels = target_width * target_height
+        
+        # Only limit if the total pixel count exceeds reasonable limits
+        if target_pixels > max_pixels:
+            # Calculate scale factor to fit within pixel budget
+            scale = (max_pixels / target_pixels) ** 0.5
+            target_width = int(target_width * scale)
+            target_height = int(target_height * scale)
+        
+        # Additional safety check for extreme dimensions
+        if target_width > self.MAX_DISPLAY_SIZE[0]:
+            scale = self.MAX_DISPLAY_SIZE[0] / target_width
+            target_width = int(target_width * scale)
+            target_height = int(target_height * scale)
             
+        if target_height > self.MAX_DISPLAY_SIZE[1]:
+            scale = self.MAX_DISPLAY_SIZE[1] / target_height
             target_width = int(target_width * scale)
             target_height = int(target_height * scale)
         
@@ -130,7 +170,7 @@ class ImageManager:
             # Use LANCZOS for downscaling (better quality)
             resample = Image.Resampling.LANCZOS
         else:
-            # Use NEAREST for upscaling (faster, no smoothing artifacts for measurements)
+            # Use NEAREST for upscaling (faster, preserves pixel boundaries for measurements)
             resample = Image.Resampling.NEAREST
         
         try:
@@ -198,6 +238,33 @@ class ImageManager:
         if self.current_image_data:
             return (self.current_image_data.width, self.current_image_data.height)
         return (0, 0)
+    
+    def get_zoom_debug_info(self, zoom_level: float) -> dict:
+        """Get detailed zoom information for debugging"""
+        if not self.current_image_data:
+            return {"error": "No image loaded"}
+        
+        original_width, original_height = self.current_image_data.original_image.size
+        target_width = int(original_width * zoom_level)
+        target_height = int(original_height * zoom_level)
+        
+        # Get actual display image
+        display_image = self.get_display_image(zoom_level)
+        actual_width, actual_height = display_image.size if display_image else (0, 0)
+        
+        actual_zoom = self.get_actual_zoom_factor(zoom_level)
+        
+        return {
+            "requested_zoom": zoom_level,
+            "actual_zoom": actual_zoom,
+            "original_size": (original_width, original_height),
+            "target_size": (target_width, target_height),
+            "actual_size": (actual_width, actual_height),
+            "max_display_size": self.MAX_DISPLAY_SIZE,
+            "is_limited": actual_zoom < zoom_level * 0.99,  # Allow 1% tolerance
+            "zoom_percentage": f"{zoom_level * 100:.1f}%",
+            "actual_percentage": f"{actual_zoom * 100:.1f}%"
+        }
     
     def __del__(self):
         """Cleanup when object is destroyed"""
