@@ -1,0 +1,212 @@
+"""
+Dialog Windows
+
+Various dialog windows for user input and configuration
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+from typing import Optional
+
+class CalibrationDialog:
+    """Dialog for calibration distance input"""
+    
+    def __init__(self, parent, pixel_distance: float):
+        self.parent = parent
+        self.pixel_distance = pixel_distance
+        self.result: Optional[float] = None
+        
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("Calibration")
+        self.dialog.geometry("350x200")
+        self.dialog.resizable(False, False)
+        
+        # Make dialog modal
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Center dialog
+        self.center_dialog()
+        
+        self.create_widgets()
+    
+    def center_dialog(self):
+        """Center dialog on parent window"""
+        self.dialog.update_idletasks()
+        
+        parent_x = self.parent.winfo_rootx()
+        parent_y = self.parent.winfo_rooty()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        
+        dialog_width = self.dialog.winfo_width()
+        dialog_height = self.dialog.winfo_height()
+        
+        x = parent_x + (parent_width - dialog_width) // 2
+        y = parent_y + (parent_height - dialog_height) // 2
+        
+        self.dialog.geometry(f"+{x}+{y}")
+    
+    def create_widgets(self):
+        """Create dialog widgets"""
+        # Main frame
+        main_frame = ttk.Frame(self.dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = ttk.Label(
+            main_frame, 
+            text="Set Calibration Distance",
+            font=("TkDefaultFont", 12, "bold")
+        )
+        title_label.pack(pady=(0, 10))
+        
+        # Info
+        info_text = f"You selected two points {self.pixel_distance:.1f} pixels apart.\n"
+        info_text += "Enter the real-world distance between these points:"
+        
+        info_label = ttk.Label(main_frame, text=info_text, justify=tk.LEFT)
+        info_label.pack(pady=(0, 15))
+        
+        # Input frame
+        input_frame = ttk.Frame(main_frame)
+        input_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        ttk.Label(input_frame, text="Distance:").pack(side=tk.LEFT)
+        
+        self.distance_var = tk.StringVar()
+        self.distance_entry = ttk.Entry(
+            input_frame, 
+            textvariable=self.distance_var,
+            width=15
+        )
+        self.distance_entry.pack(side=tk.LEFT, padx=(5, 5))
+        
+        ttk.Label(input_frame, text="units").pack(side=tk.LEFT)
+        
+        # Focus on entry
+        self.distance_entry.focus()
+        
+        # Note
+        note_label = ttk.Label(
+            main_frame,
+            text="Note: Use any unit you prefer (mm, inches, etc.)\nAll measurements will be in the same units.",
+            font=("TkDefaultFont", 8),
+            foreground="gray"
+        )
+        note_label.pack(pady=(0, 15))
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+        
+        ttk.Button(
+            button_frame, 
+            text="Cancel", 
+            command=self.cancel
+        ).pack(side=tk.RIGHT, padx=(5, 0))
+        
+        ttk.Button(
+            button_frame, 
+            text="OK", 
+            command=self.ok
+        ).pack(side=tk.RIGHT)
+        
+        # Bind Enter key
+        self.dialog.bind("<Return>", lambda e: self.ok())
+        self.dialog.bind("<Escape>", lambda e: self.cancel())
+    
+    def ok(self):
+        """Handle OK button"""
+        try:
+            value = float(self.distance_var.get().strip())
+            if value <= 0:
+                messagebox.showerror("Invalid Input", "Distance must be positive")
+                return
+            
+            self.result = value
+            self.dialog.destroy()
+            
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid number")
+    
+    def cancel(self):
+        """Handle Cancel button"""
+        self.result = None
+        self.dialog.destroy()
+
+class AboutDialog:
+    """About dialog"""
+    
+    def __init__(self, parent):
+        self.parent = parent
+        
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("About Optical Measurement Tool")
+        self.dialog.geometry("400x300")
+        self.dialog.resizable(False, False)
+        
+        # Make dialog modal
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Center dialog
+        self.center_dialog()
+        
+        self.create_widgets()
+    
+    def center_dialog(self):
+        """Center dialog on parent window"""
+        self.dialog.update_idletasks()
+        
+        parent_x = self.parent.winfo_rootx()
+        parent_y = self.parent.winfo_rooty()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        
+        dialog_width = self.dialog.winfo_width()
+        dialog_height = self.dialog.winfo_height()
+        
+        x = parent_x + (parent_width - dialog_width) // 2
+        y = parent_y + (parent_height - dialog_height) // 2
+        
+        self.dialog.geometry(f"+{x}+{y}")
+    
+    def create_widgets(self):
+        """Create dialog widgets"""
+        # Main frame
+        main_frame = ttk.Frame(self.dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = ttk.Label(
+            main_frame,
+            text="Optical Measurement Tool",
+            font=("TkDefaultFont", 16, "bold")
+        )
+        title_label.pack(pady=(0, 10))
+        
+        # Version
+        version_label = ttk.Label(main_frame, text="Version 2.0")
+        version_label.pack(pady=(0, 15))
+        
+        # Description - using simple text without bullet points to avoid encoding issues
+        description = """A desktop application for precise measurements on digital images.
+                        By: Pau Bas Calopa (C) 2026."""
+        
+        description_label = ttk.Label(
+            main_frame, 
+            text=description,
+            justify=tk.LEFT
+        )
+        description_label.pack(pady=(0, 20))
+        
+        # Close button
+        ttk.Button(
+            main_frame,
+            text="Close",
+            command=self.dialog.destroy
+        ).pack()
+        
+        # Bind Escape key
+        self.dialog.bind("<Escape>", lambda e: self.dialog.destroy())
