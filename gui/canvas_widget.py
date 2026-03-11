@@ -15,6 +15,13 @@ from core.image_manager import ImageManager
 from core.measurement_engine import MeasurementEngine
 from models.measurement_data import MeasurementBase
 
+# Phase 3: Import new architecture components
+from gui.canvas.coordinate_manager import CoordinateManager
+from gui.canvas.event_manager import EventManager
+from gui.canvas.tool_handler import ToolHandler
+from gui.canvas.overlay_manager import OverlayManager
+from gui.canvas.calibration_handler import CalibrationHandler
+
 class ImageCanvas(Canvas):
     """Custom canvas for interactive image display and measurements"""
     
@@ -27,6 +34,13 @@ class ImageCanvas(Canvas):
         # Reference to main application window for dialog callbacks
         self.main_app = None  # Will be set by main window
         
+        # Phase 3: Initialize all managers
+        self.coordinate_manager = CoordinateManager(self)
+        self.event_manager = EventManager(self)
+        self.tool_handler = ToolHandler(self)
+        self.overlay_manager = OverlayManager(self)
+        self.calibration_handler = CalibrationHandler(self)
+        
         # Canvas state
         self.current_image: Optional[ImageData] = None
         self.photo_image: Optional[ImageTk.PhotoImage] = None
@@ -35,23 +49,18 @@ class ImageCanvas(Canvas):
         # Interaction state
         self.current_tool: str = "pan"
         self.temp_points: List[Tuple[float, float]] = []
-        self.calibration_points: List[Tuple[float, float]] = []
         self.is_calibrating: bool = False
         
         # Display state
         self.zoom_level: float = 1.0  # Requested zoom level
         self.actual_zoom_level: float = 1.0  # Actual zoom level (after MAX_DISPLAY_SIZE limiting)
-        self.pan_start: Optional[Tuple[int, int]] = None
-        self.right_pan_start: Optional[Tuple[int, int]] = None  # ? NEW: Right-click pan state
-        self.last_mouse_pos: Tuple[int, int] = (0, 0)  # ? NEW: Track mouse position for zoom-to-cursor
+        self.last_mouse_pos: Tuple[int, int] = (0, 0)  # Track mouse position for zoom-to-cursor
         
-        # Overlays
-        self.measurement_overlays = {}  # measurement_id -> canvas_items
+        # Overlays - now managed by OverlayManager
         self.temp_overlays = []  # temporary drawing items
-        self.overlays_visible = True  # ? NEW: Track overlay visibility state
         
-        # Bind events
-        self.bind_events()
+        # Bind events using event manager
+        self.event_manager.bind_all_events()
     
     def bind_events(self):
         """Bind mouse and keyboard events"""
@@ -109,26 +118,16 @@ class ImageCanvas(Canvas):
             
             # ? FIX: Only update overlays when zoom changes, not on every display update
             self.redraw_all_overlays()
+            # ? FIX: Redraw calibration overlays after zoom
+            if self.is_calibrating:
+                self.redraw_calibration_overlays()
             
             # Update scroll region
             self.configure(scrollregion=self.bbox("all"))
     
     def redraw_all_overlays(self):
-        """Redraw all measurement overlays at current zoom/pan position"""
-        # Only redraw if overlays should be visible
-        if not self.overlays_visible:
-            return
-            
-        # Simple approach: just redraw all overlays using stored image coordinates
-        from core.app_state import app_state
-        
-        # Clear all existing overlays
-        for measurement_id in list(self.measurement_overlays.keys()):
-            self.remove_measurement_overlay(measurement_id)
-        
-        # Redraw each measurement
-        for measurement in app_state.measurements:
-            self.draw_measurement_overlay(measurement)
+        """Redraw all measurement overlays - delegates to OverlayManager"""
+        self.overlay_manager.redraw_all_overlays()
     
     def center_image(self):
         """Center image in canvas"""
@@ -150,11 +149,12 @@ class ImageCanvas(Canvas):
         center_x = max(0, (canvas_width - image_width) // 2)
         center_y = max(0, (canvas_height - image_height) // 2)
         
-        # Move image to center
-        if self.image_id:
-            self.coords(self.image_id, center_x, center_y)
+        # Apply Microsoft Paint style smart boundaries to centering
+        bounded_x, bounded_y = self._apply_smart_pan_boundaries(center_x, center_y)
         
-        # ? FIX: Don't update overlays here - they should track automatically
+        # Move image to bounded center position
+        if self.image_id:
+            self.coords(self.image_id, bounded_x, bounded_y)
         
         # Update scroll region
         self.configure(scrollregion=self.bbox("all"))
@@ -228,14 +228,20 @@ class ImageCanvas(Canvas):
         
         # Only adjust position if zoom actually changed
         if self.zoom_level != old_zoom:
-            # Move image to calculated position
-            self.coords(self.image_id, new_image_x, new_image_y)
+            # Apply Microsoft Paint style smart boundaries to zoom positioning
+            bounded_x, bounded_y = self._apply_smart_pan_boundaries(new_image_x, new_image_y)
             
-            # Update scroll region
-            self.configure(scrollregion=self.bbox("all"))
+            # Move image to bounded position
+            self.coords(self.image_id, bounded_x, bounded_y)
+            
+            # Stabilize coordinate system after zoom operation
+            self._stabilize_coordinate_system()
             
             # Redraw overlays at new position
             self.redraw_all_overlays()
+            # Redraw calibration overlays after zoom
+            if self.is_calibrating:
+                self.redraw_calibration_overlays()
     
     def zoom_fit(self):
         """Zoom to fit image in canvas"""
@@ -275,151 +281,129 @@ class ImageCanvas(Canvas):
         app_state.set_zoom_level(self.zoom_level)
     
     def screen_to_image_coords(self, screen_x: int, screen_y: int) -> Tuple[float, float]:
-        """Convert screen coordinates to image coordinates"""
-        if not self.current_image or not self.image_id:
-            return (screen_x, screen_y)
-        
-        # Get current image position on canvas
-        image_x, image_y = self.coords(self.image_id)
-        
-        # ? SIMPLE FIX: Basic coordinate conversion
-        # Convert screen click to original image coordinates
-        rel_x = (screen_x - image_x) / self.actual_zoom_level
-        rel_y = (screen_y - image_y) / self.actual_zoom_level
-        
-        return (rel_x, rel_y)
+        """Convert screen coordinates to image coordinates - delegates to CoordinateManager"""
+        return self.coordinate_manager.screen_to_image(screen_x, screen_y)
     
     def image_to_screen_coords(self, image_x: float, image_y: float) -> Tuple[int, int]:
-        """Convert image coordinates to screen coordinates"""
-        if not self.current_image or not self.image_id:
-            return (int(image_x), int(image_y))
-        
-        # Get current image position on canvas
-        canvas_image_x, canvas_image_y = self.coords(self.image_id)
-        
-        # ? SIMPLE FIX: Basic coordinate conversion
-        # Convert stored image coordinates to current screen position
-        screen_x = int(canvas_image_x + image_x * self.actual_zoom_level)
-        screen_y = int(canvas_image_y + image_y * self.actual_zoom_level)
-        
-        return (screen_x, screen_y)
+        """Convert image coordinates to screen coordinates - delegates to CoordinateManager"""
+        return self.coordinate_manager.image_to_screen(image_x, image_y)
     
-    def set_tool(self, tool_name: str):
-        """Set current measurement tool"""
-        self.current_tool = tool_name
-        self.temp_points.clear()
-        self.clear_temp_overlays()
+    def _update_actual_zoom_level(self):
+        """Ensure actual_zoom_level is synchronized with current zoom state"""
+        if self.current_image and self.image_manager:
+            self.actual_zoom_level = self.image_manager.get_actual_zoom_factor(self.zoom_level)
+    
+    def _force_coordinate_system_refresh(self):
+        print(f"  Coordinate system refreshed")
+    
+    def _apply_smart_pan_boundaries(self, intended_x: float, intended_y: float) -> Tuple[float, float]:
+        """Apply unified pan boundaries for both image and canvas coordinate systems"""
+        if not self.photo_image:
+            return (intended_x, intended_y)
         
-        # Update cursor
-        if tool_name == "pan":
-            self.config(cursor="hand2")
+        # Get canvas and image dimensions
+        canvas_width = self.winfo_width()
+        canvas_height = self.winfo_height()
+        image_width = self.photo_image.width()
+        image_height = self.photo_image.height()
+        
+        # ?? SOLUTION: Create unified panning limits
+        # Instead of allowing image to go mostly off-screen, constrain both systems together
+        
+        # Calculate bounds that keep image and canvas coordinates synchronized
+        if image_width <= canvas_width:
+            # If image is smaller than canvas, center it and limit movement
+            min_x = (canvas_width - image_width) // 2
+            max_x = min_x
         else:
-            self.config(cursor="crosshair")
+            # If image is larger than canvas, allow panning but keep edges visible
+            margin = min(50, image_width // 10)  # 10% margin or 50px, whichever is smaller
+            min_x = canvas_width - image_width - margin  # Left boundary
+            max_x = margin  # Right boundary
+        
+        if image_height <= canvas_height:
+            # If image is smaller than canvas, center it and limit movement
+            min_y = (canvas_height - image_height) // 2
+            max_y = min_y
+        else:
+            # If image is larger than canvas, allow panning but keep edges visible
+            margin = min(50, image_height // 10)  # 10% margin or 50px, whichever is smaller
+            min_y = canvas_height - image_height - margin  # Top boundary
+            max_y = margin  # Bottom boundary
+        
+        # Apply unified boundaries
+        bounded_x = max(min_x, min(max_x, intended_x))
+        bounded_y = max(min_y, min(max_y, intended_y))
+        
+        # ?? CRITICAL: Update canvas scrollregion to match image boundaries
+        # This ensures canvas and image coordinate systems stay synchronized
+        image_left = bounded_x
+        image_right = bounded_x + image_width
+        image_top = bounded_y
+        image_bottom = bounded_y + image_height
+        
+        # Set scrollregion to encompass the bounded image area
+        # Add small padding to prevent edge issues
+        padding = 10
+        scroll_left = min(0, image_left - padding)
+        scroll_top = min(0, image_top - padding)
+        scroll_right = max(canvas_width, image_right + padding)
+        scroll_bottom = max(canvas_height, image_bottom + padding)
+        
+        # Update scrollregion to match the actual bounded area
+        self.configure(scrollregion=(scroll_left, scroll_top, scroll_right, scroll_bottom))
+        
+        return (bounded_x, bounded_y)
     
-    def start_calibration(self):
-        """Start calibration mode"""
-        self.is_calibrating = True
-        self.calibration_points.clear()
-        self.temp_points.clear()
-        self.clear_temp_overlays()
+    def _stabilize_coordinate_system(self):
+        """Stabilize the canvas coordinate system to prevent drift issues"""
+        # Force tkinter to process all pending operations
+        self.update_idletasks()
         
-        # Clear any existing calibration overlays
-        self.delete("calibration")
+        # Refresh zoom level synchronization
+        self._update_actual_zoom_level()
         
-        # Set crosshair cursor
-        self.config(cursor="crosshair")
+        # Update scroll region based on actual canvas content
+        self.configure(scrollregion=self.bbox("all"))
         
-        # Add visual indication that we're in calibration mode
-        # Draw instruction text on canvas
+        # Force another update to ensure stability
+        self.update_idletasks()
+    
+    def _create_fixed_calibration_text(self, text: str):
+        """Create calibration instruction text that stays fixed regardless of canvas state"""
+        canvas_width = self.winfo_width()
+        
+        # Create text at a fixed position relative to canvas widget, not canvas content
         self.create_text(
-            self.winfo_width() // 2, 30,
-            text="CALIBRATION MODE: Click two points",
+            canvas_width // 2, 30,  # Fixed position
+            text=text,
             fill="red", font=("Arial", 12, "bold"),
             tags="calibration_instruction"
         )
     
+    def set_tool(self, tool_name: str):
+        """Set current measurement tool - delegates to ToolHandler"""
+        self.tool_handler.set_tool(tool_name)
+    
+    def start_calibration(self):
+        """Start calibration mode - delegates to CalibrationHandler"""
+        self.calibration_handler.start_calibration()
+    
     def get_calibration_points(self) -> List[Tuple[float, float]]:
-        """Get calibration points"""
-        return self.calibration_points.copy()
+        """Get calibration points - delegates to CalibrationHandler"""
+        return self.calibration_handler.get_calibration_points()
     
     def clear_calibration(self):
-        """Clear calibration overlays"""
-        self.delete("calibration")
-        self.delete("calibration_instruction")
-        self.calibration_points.clear()
-        self.is_calibrating = False
-        self.config(cursor="")  # Reset cursor
+        """Clear calibration overlays - delegates to CalibrationHandler"""
+        self.calibration_handler.clear_calibration()
     
-    def on_left_click(self, event):
-        """Handle left mouse button click (tools and measurements)"""
-        if self.is_calibrating:
-            self.handle_calibration_click(event)
-        elif self.current_tool == "pan":
-            # Left-click pan (traditional behavior, still available when pan tool is active)
-            self.pan_start = (event.x, event.y)
-        elif self.current_tool in ["distance", "radius", "angle", "two_line_angle"]:
-            self.handle_measurement_click(event)
+    def redraw_calibration_overlays(self):
+        """Redraw calibration overlays - delegates to CalibrationHandler"""
+        self.calibration_handler.redraw_calibration_overlays()
     
-    def on_left_drag(self, event):
-        """Handle left mouse button drag"""
-        if self.current_tool == "pan" and self.pan_start:
-            # Traditional pan with left button (when pan tool is active)
-            dx = event.x - self.pan_start[0]
-            dy = event.y - self.pan_start[1]
-            
-            if self.image_id:
-                self.move(self.image_id, dx, dy)
-            
-            self.pan_start = (event.x, event.y)
-            self.configure(scrollregion=self.bbox("all"))
-    
-    def on_left_release(self, event):
-        """Handle left mouse button release"""
-        if self.current_tool == "pan" and self.pan_start:
-            self.pan_start = None
-            self.redraw_all_overlays()
-    
-    def on_right_click(self, event):
-        """Handle right mouse button click (always pan, regardless of tool)"""
-        self.right_pan_start = (event.x, event.y)
-        # ? NEW: Change cursor to indicate panning mode
-        self.config(cursor="fleur")  # Four-direction arrow cursor
-    
-    def on_right_drag(self, event):
-        """Handle right mouse button drag (pan)"""
-        if self.right_pan_start:
-            dx = event.x - self.right_pan_start[0]
-            dy = event.y - self.right_pan_start[1]
-            
-            if self.image_id:
-                self.move(self.image_id, dx, dy)
-            
-            self.right_pan_start = (event.x, event.y)
-            self.configure(scrollregion=self.bbox("all"))
-    
-    def on_right_release(self, event):
-        """Handle right mouse button release"""
-        if self.right_pan_start:
-            self.right_pan_start = None
-            # ? NEW: Restore cursor to tool-appropriate cursor
-            self.set_tool(self.current_tool)  # This will set the proper cursor
-            # Update overlays after pan is complete
-            self.redraw_all_overlays()
-    
-    def on_mouse_move(self, event):
-        """Handle mouse movement"""
-        # ? NEW: Track mouse position for zoom-to-cursor functionality
-        self.last_mouse_pos = (event.x, event.y)
-        
-        # Update cursor position in main window
-        image_coords = self.screen_to_image_coords(event.x, event.y)
-        if hasattr(self.master.master, 'update_cursor_position'):
-            self.master.master.update_cursor_position(int(image_coords[0]), int(image_coords[1]))
-    
-    def on_mousewheel(self, event):
-        """Handle mouse wheel zoom - zoom toward cursor position"""
-        # ? IMPROVED: Zoom toward cursor instead of image center
-        self.zoom_at_cursor(event.x, event.y, event.delta > 0)
+    def simple_calibration_click(self, event):
+        """Unified calibration click handler - delegates to CalibrationHandler"""
+        self.calibration_handler.handle_click(event)
     
     def on_key_press(self, event):
         """Handle key press events"""
@@ -427,96 +411,25 @@ class ImageCanvas(Canvas):
             self.temp_points.clear()
             self.clear_temp_overlays()
             if self.is_calibrating:
-                self.is_calibrating = False
-                self.calibration_points.clear()
-                self.delete("calibration")
-                self.delete("calibration_instruction")
-                self.config(cursor="")
+                self.calibration_handler.handle_escape()
                 
                 # Update status in main window
                 if self.main_app and hasattr(self.main_app, 'status_label'):
                     self.main_app.status_label.config(text="Calibration cancelled")
     
-    def handle_calibration_click(self, event):
-        """Handle calibration click"""
-        # Convert to image coordinates
-        image_coords = self.screen_to_image_coords(event.x, event.y)
-        self.calibration_points.append(image_coords)
-        
-        # Draw calibration point
-        screen_coords = self.image_to_screen_coords(*image_coords)
-        point_id = self.create_oval(
-            screen_coords[0] - 5, screen_coords[1] - 5,
-            screen_coords[0] + 5, screen_coords[1] + 5,
-            fill="red", outline="white", width=2, tags="calibration"
-        )
-        
-        # Update instruction text
-        if len(self.calibration_points) == 1:
-            self.delete("calibration_instruction")
-            self.create_text(
-                self.winfo_width() // 2, 30,
-                text="CALIBRATION: Click second point",
-                fill="red", font=("Arial", 12, "bold"),
-                tags="calibration_instruction"
-            )
-        
-        if len(self.calibration_points) == 2:
-            # Remove instruction text
-            self.delete("calibration_instruction")
-            
-            # Draw calibration line
-            screen1 = self.image_to_screen_coords(*self.calibration_points[0])
-            screen2 = self.image_to_screen_coords(*self.calibration_points[1])
-            
-            line_id = self.create_line(
-                screen1[0], screen1[1], screen2[0], screen2[1],
-                fill="red", width=3, tags="calibration"
-            )
-            
-            # Calculate pixel distance and show dialog
-            from utils.math_utils import calculate_distance
-            pixel_distance = calculate_distance(self.calibration_points[0], self.calibration_points[1])
-            
-            self.is_calibrating = False
-            self.config(cursor="")  # Reset cursor
-            
-            # Trigger calibration dialog
-            if self.main_app and hasattr(self.main_app, 'show_calibration_dialog'):
-                self.main_app.show_calibration_dialog(pixel_distance)
-            else:
-                # Fallback - try to find main window
-                self._try_show_calibration_dialog(pixel_distance)
-    
     def handle_measurement_click(self, event):
-        """Handle measurement tool click"""
-        # Convert to image coordinates
-        image_coords = self.screen_to_image_coords(event.x, event.y)
-        self.temp_points.append(image_coords)
-        
-        # Draw temporary point
-        screen_coords = self.image_to_screen_coords(*image_coords)
-        point_id = self.create_oval(
-            screen_coords[0] - 2, screen_coords[1] - 2,
-            screen_coords[0] + 2, screen_coords[1] + 2,
-            fill="blue", outline="blue", tags="temp"
-        )
-        self.temp_overlays.append(point_id)
-        
-        # Check if measurement is complete
-        points_needed = {
-            "distance": 2,
-            "radius": 3,
-            "angle": 3,
-            "two_line_angle": 4
-        }
-        
-        if len(self.temp_points) >= points_needed.get(self.current_tool, 2):
-            self.complete_measurement()
+        """Handle measurement tool click - delegates to ToolHandler"""
+        self.tool_handler.handle_measurement_click(event)
+    
+    def handle_polygon_click(self, event):
+        """Handle polygon area tool click - delegates to ToolHandler"""
+        self.tool_handler.handle_polygon_click(event)
     
     def complete_measurement(self):
         """Complete current measurement"""
         try:
+            measurement = None
+            
             if self.current_tool == "distance" and len(self.temp_points) >= 2:
                 measurement = self.measurement_engine.calculate_distance_measurement(
                     self.temp_points[0], self.temp_points[1]
@@ -533,19 +446,38 @@ class ImageCanvas(Canvas):
                 measurement = self.measurement_engine.calculate_two_line_angle_measurement(
                     self.temp_points[0], self.temp_points[1], self.temp_points[2], self.temp_points[3]
                 )
+            # ? PHASE 3: Advanced measurement calculations
+            elif self.current_tool == "polygon_area" and len(self.temp_points) >= 3:
+                measurement = self.measurement_engine.calculate_polygon_area_measurement(
+                    self.temp_points.copy()
+                )
+            elif self.current_tool == "coordinate" and len(self.temp_points) >= 1:
+                coord_type = "single" if len(self.temp_points) == 1 else "difference"
+                measurement = self.measurement_engine.calculate_coordinate_measurement(
+                    self.temp_points.copy(), coord_type
+                )
+            elif self.current_tool == "point_to_line" and len(self.temp_points) >= 3:
+                measurement = self.measurement_engine.calculate_point_to_line_measurement(
+                    self.temp_points[0], self.temp_points[1], self.temp_points[2]
+                )
+            elif self.current_tool == "arc_length" and len(self.temp_points) >= 3:
+                measurement = self.measurement_engine.calculate_arc_length_measurement(
+                    self.temp_points[0], self.temp_points[1], self.temp_points[2]
+                )
             else:
                 return
             
-            # Add to application state
-            from core.app_state import app_state
-            app_state.add_measurement(measurement)
-            
-            # Draw measurement overlay
-            self.draw_measurement_overlay(measurement)
-            
-            # Clear temporary elements
-            self.temp_points.clear()
-            self.clear_temp_overlays()
+            if measurement:
+                # Add to application state
+                from core.app_state import app_state
+                app_state.add_measurement(measurement)
+                
+                # Draw measurement overlay
+                self.draw_measurement_overlay(measurement)
+                
+                # Clear temporary elements
+                self.temp_points.clear()
+                self.clear_temp_overlays()
             
         except Exception as e:
             from tkinter import messagebox
@@ -554,147 +486,16 @@ class ImageCanvas(Canvas):
             self.clear_temp_overlays()
     
     def draw_measurement_overlay(self, measurement: MeasurementBase):
-        """Draw measurement overlay on canvas"""
-        # Don't draw if overlays are hidden
-        if not self.overlays_visible:
-            return
-            
-        overlay_items = []
-        
-        if measurement.measurement_type == "distance":
-            # Draw line between points
-            screen1 = self.image_to_screen_coords(*measurement.points[0])
-            screen2 = self.image_to_screen_coords(*measurement.points[1])
-            
-            line_id = self.create_line(
-                screen1[0], screen1[1], screen2[0], screen2[1],
-                fill="green", width=2, tags=f"measurement_{measurement.id}"
-            )
-            overlay_items.append(line_id)
-            
-            # Draw result text
-            mid_x = (screen1[0] + screen2[0]) / 2
-            mid_y = (screen1[1] + screen2[1]) / 2
-            result_text = self.measurement_engine.format_measurement_result(measurement)
-            
-            text_id = self.create_text(
-                mid_x, mid_y - 10, text=result_text,
-                fill="green", font=("Arial", 8), tags=f"measurement_{measurement.id}"
-            )
-            overlay_items.append(text_id)
-        
-        elif measurement.measurement_type == "radius":
-            # Draw circle
-            if hasattr(measurement, 'center_point') and measurement.center_point:
-                center_screen = self.image_to_screen_coords(*measurement.center_point)
-                radius_pixels = measurement.result / self.measurement_engine.calibration.scale_factor if self.measurement_engine.calibration else measurement.result
-                # ? FIX: Use actual zoom factor for circle scaling
-                radius_screen = radius_pixels * self.actual_zoom_level
-                
-                circle_id = self.create_oval(
-                    center_screen[0] - radius_screen, center_screen[1] - radius_screen,
-                    center_screen[0] + radius_screen, center_screen[1] + radius_screen,
-                    outline="blue", width=2, tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(circle_id)
-                
-                # Draw center point
-                center_id = self.create_oval(
-                    center_screen[0] - 2, center_screen[1] - 2,
-                    center_screen[0] + 2, center_screen[1] + 2,
-                    fill="blue", outline="blue", tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(center_id)
-                
-                # Draw result text
-                result_text = self.measurement_engine.format_measurement_result(measurement)
-                text_id = self.create_text(
-                    center_screen[0], center_screen[1] - radius_screen - 15,
-                    text=result_text, fill="blue", font=("Arial", 8),
-                    tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(text_id)
-        
-        elif measurement.measurement_type == "angle":
-            # Draw angle arc between three points
-            if len(measurement.points) >= 3:
-                vertex_screen = self.image_to_screen_coords(*measurement.points[1])
-                p1_screen = self.image_to_screen_coords(*measurement.points[0])
-                p3_screen = self.image_to_screen_coords(*measurement.points[2])
-                
-                # Draw lines from vertex
-                line1_id = self.create_line(
-                    vertex_screen[0], vertex_screen[1], p1_screen[0], p1_screen[1],
-                    fill="orange", width=2, tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(line1_id)
-                
-                line2_id = self.create_line(
-                    vertex_screen[0], vertex_screen[1], p3_screen[0], p3_screen[1],
-                    fill="orange", width=2, tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(line2_id)
-                
-                # Draw result text near vertex
-                result_text = self.measurement_engine.format_measurement_result(measurement)
-                text_id = self.create_text(
-                    vertex_screen[0] + 20, vertex_screen[1] - 20,
-                    text=result_text, fill="orange", font=("Arial", 8),
-                    tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(text_id)
-        
-        elif measurement.measurement_type == "two_line_angle":
-            # Draw two lines and angle between them
-            if len(measurement.points) >= 4:
-                # First line
-                line1_p1_screen = self.image_to_screen_coords(*measurement.points[0])
-                line1_p2_screen = self.image_to_screen_coords(*measurement.points[1])
-                
-                # Second line  
-                line2_p1_screen = self.image_to_screen_coords(*measurement.points[2])
-                line2_p2_screen = self.image_to_screen_coords(*measurement.points[3])
-                
-                # Draw first line
-                line1_id = self.create_line(
-                    line1_p1_screen[0], line1_p1_screen[1], line1_p2_screen[0], line1_p2_screen[1],
-                    fill="purple", width=2, tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(line1_id)
-                
-                # Draw second line
-                line2_id = self.create_line(
-                    line2_p1_screen[0], line2_p1_screen[1], line2_p2_screen[0], line2_p2_screen[1],
-                    fill="purple", width=2, tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(line2_id)
-                
-                # Draw result text in center of the two lines
-                center_x = (line1_p1_screen[0] + line1_p2_screen[0] + line2_p1_screen[0] + line2_p2_screen[0]) / 4
-                center_y = (line1_p1_screen[1] + line1_p2_screen[1] + line2_p1_screen[1] + line2_p2_screen[1]) / 4
-                
-                result_text = self.measurement_engine.format_measurement_result(measurement)
-                text_id = self.create_text(
-                    center_x, center_y - 15,
-                    text=result_text, fill="purple", font=("Arial", 8),
-                    tags=f"measurement_{measurement.id}"
-                )
-                overlay_items.append(text_id)
-        
-        # Store overlay items
-        self.measurement_overlays[measurement.id] = overlay_items
+        """Draw measurement overlay - delegates to OverlayManager"""
+        self.overlay_manager.draw_measurement_overlay(measurement)
     
     def remove_measurement_overlay(self, measurement_id: str):
-        """Remove measurement overlay"""
-        if measurement_id in self.measurement_overlays:
-            for item_id in self.measurement_overlays[measurement_id]:
-                self.delete(item_id)
-            del self.measurement_overlays[measurement_id]
+        """Remove measurement overlay - delegates to OverlayManager"""
+        self.overlay_manager.remove_measurement_overlay(measurement_id)
     
     def clear_all_overlays(self):
-        """Clear all measurement overlays"""
-        for measurement_id in list(self.measurement_overlays.keys()):
-            self.remove_measurement_overlay(measurement_id)
+        """Clear all measurement overlays - delegates to OverlayManager"""
+        self.overlay_manager.clear_all_overlays()
         self.clear_temp_overlays()
     
     def clear_temp_overlays(self):
@@ -703,38 +504,16 @@ class ImageCanvas(Canvas):
         self.temp_overlays.clear()
     
     def toggle_overlays_visibility(self):
-        """Toggle visibility of all measurement overlays"""
-        self.overlays_visible = not self.overlays_visible
-        
-        if self.overlays_visible:
-            # Show overlays - make all overlay items visible again
-            for measurement_id in self.measurement_overlays:
-                for item_id in self.measurement_overlays[measurement_id]:
-                    try:
-                        self.itemconfig(item_id, state="normal")
-                    except:
-                        pass  # Item might have been deleted
-            # Also redraw to ensure everything is current
-            self.redraw_all_overlays()
-        else:
-            # Hide overlays - hide all overlay items
-            for measurement_id in self.measurement_overlays:
-                for item_id in self.measurement_overlays[measurement_id]:
-                    try:
-                        self.itemconfig(item_id, state="hidden")
-                    except:
-                        pass  # Item might have been deleted
-        
-        return self.overlays_visible
+        """Toggle visibility of all measurement overlays - delegates to OverlayManager"""
+        return self.overlay_manager.toggle_visibility()
     
     def set_overlays_visibility(self, visible: bool):
-        """Set overlay visibility state"""
-        if self.overlays_visible != visible:
-            self.toggle_overlays_visibility()
+        """Set overlay visibility state - delegates to OverlayManager"""
+        self.overlay_manager.set_visibility(visible)
     
     def get_overlays_visibility(self) -> bool:
-        """Get current overlay visibility state"""
-        return self.overlays_visible
+        """Get current overlay visibility state - delegates to OverlayManager"""
+        return self.overlay_manager.get_visibility()
     
     def export_image(self, filename: str):
         """Export image with overlays rendered directly onto the image"""
@@ -761,7 +540,7 @@ class ImageCanvas(Canvas):
         
         # Draw each measurement overlay on the original image
         for measurement in app_state.measurements:
-            if not self.overlays_visible:  # Respect overlay visibility setting
+            if not self.overlay_manager.get_visibility():  # Respect overlay visibility setting
                 continue
                 
             self._draw_measurement_on_image(draw, measurement, export_image.size, font)
@@ -919,6 +698,163 @@ class ImageCanvas(Canvas):
                              fill="purple", font=font)
                 else:
                     draw.text((center_x, center_y), result_text, fill="purple")
+        
+        # ? PHASE 3: Advanced measurement export rendering
+        elif measurement.measurement_type == "polygon_area":
+            # Draw polygon area
+            if len(measurement.points) >= 3:
+                # Draw polygon outline
+                polygon_coords = [(p[0], p[1]) for p in measurement.points]
+                
+                # Draw polygon lines
+                for i in range(len(polygon_coords)):
+                    next_i = (i + 1) % len(polygon_coords)
+                    draw.line([polygon_coords[i], polygon_coords[next_i]], 
+                             fill="cyan", width=line_width)
+                
+                # Draw result text at centroid
+                center_x = sum(p[0] for p in polygon_coords) / len(polygon_coords)
+                center_y = sum(p[1] for p in polygon_coords) / len(polygon_coords)
+                
+                result_text = self.measurement_engine.format_measurement_result(measurement)
+                
+                if font:
+                    bbox = draw.textbbox((0, 0), result_text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    
+                    draw.rectangle([
+                        center_x - text_width//2 - 2, center_y - text_height//2 - 2,
+                        center_x + text_width//2 + 2, center_y + text_height//2 + 2
+                    ], fill="white", outline="cyan")
+                    
+                    draw.text((center_x - text_width//2, center_y - text_height//2), result_text, 
+                             fill="cyan", font=font)
+                else:
+                    draw.text((center_x, center_y), result_text, fill="cyan")
+        
+        elif measurement.measurement_type == "coordinate":
+            # Draw coordinate points
+            for i, point in enumerate(measurement.points):
+                x, y = point
+                point_size = line_width * 3
+                
+                # Draw point marker
+                draw.ellipse([x - point_size, y - point_size, x + point_size, y + point_size], 
+                           fill="yellow", outline="black", width=1)
+                
+                # Draw coordinate text
+                if measurement.coordinate_type == "single":
+                    coord_text = f"({x:.1f}, {y:.1f})"
+                elif measurement.coordinate_type == "difference" and i == 1:
+                    dx = measurement.points[1][0] - measurement.points[0][0]
+                    dy = measurement.points[1][1] - measurement.points[0][1]
+                    coord_text = f"?X: {dx:.1f}, ?Y: {dy:.1f}"
+                else:
+                    coord_text = f"P{i+1}"
+                
+                text_x = x + 15
+                text_y = y - 15
+                
+                if font:
+                    bbox = draw.textbbox((0, 0), coord_text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    
+                    draw.rectangle([
+                        text_x - 2, text_y - 2,
+                        text_x + text_width + 2, text_y + text_height + 2
+                    ], fill="white", outline="yellow")
+                    
+                    draw.text((text_x, text_y), coord_text, fill="black", font=font)
+                else:
+                    draw.text((text_x, text_y), coord_text, fill="black")
+        
+        elif measurement.measurement_type == "point_to_line":
+            # Draw point-to-line distance
+            if len(measurement.points) >= 3:
+                point = measurement.points[0]
+                line_start = measurement.points[1]
+                line_end = measurement.points[2]
+                
+                # ? FIXED: Calculate the actual closest point on the line
+                from utils.math_utils import find_closest_point_on_line
+                closest_point = find_closest_point_on_line(point, line_start, line_end)
+                
+                # Draw the line
+                draw.line([line_start, line_end], fill="red", width=line_width)
+                
+                # Draw the point
+                point_size = line_width * 2
+                draw.ellipse([
+                    point[0] - point_size, point[1] - point_size,
+                    point[0] + point_size, point[1] + point_size
+                ], fill="red", outline="white", width=1)
+                
+                # ? FIXED: Draw the actual perpendicular line to the closest point
+                draw.line([point, closest_point], fill="red", width=line_width)
+                
+                # Draw a small marker at the closest point on the line
+                marker_size = line_width
+                draw.ellipse([
+                    closest_point[0] - marker_size, closest_point[1] - marker_size,
+                    closest_point[0] + marker_size, closest_point[1] + marker_size
+                ], fill="yellow", outline="red", width=1)
+                
+                # Draw result text
+                result_text = self.measurement_engine.format_measurement_result(measurement)
+                text_x = point[0] + 20
+                text_y = point[1] - 20
+                
+                if font:
+                    bbox = draw.textbbox((0, 0), result_text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    
+                    draw.rectangle([
+                        text_x - 2, text_y - 2,
+                        text_x + text_width + 2, text_y + text_height + 2
+                    ], fill="white", outline="red")
+                    
+                    draw.text((text_x, text_y), result_text, fill="red", font=font)
+                else:
+                    draw.text((text_x, text_y), result_text, fill="red")
+        
+        elif measurement.measurement_type == "arc_length":
+            # Draw arc length measurement
+            if len(measurement.points) >= 3:
+                # Draw points along the arc
+                for point in measurement.points:
+                    point_size = line_width * 2
+                    draw.ellipse([
+                        point[0] - point_size, point[1] - point_size,
+                        point[0] + point_size, point[1] + point_size
+                    ], fill="magenta", outline="white", width=1)
+                
+                # Draw arc approximation (connecting lines)
+                for i in range(len(measurement.points) - 1):
+                    draw.line([measurement.points[i], measurement.points[i + 1]], 
+                             fill="magenta", width=line_width)
+                
+                # Draw result text
+                result_text = self.measurement_engine.format_measurement_result(measurement)
+                center_x = sum(p[0] for p in measurement.points) / len(measurement.points)
+                center_y = sum(p[1] for p in measurement.points) / len(measurement.points) - 20
+                
+                if font:
+                    bbox = draw.textbbox((0, 0), result_text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    
+                    draw.rectangle([
+                        center_x - text_width//2 - 2, center_y - text_height//2 - 2,
+                        center_x + text_width//2 + 2, center_y + text_height//2 + 2
+                    ], fill="white", outline="magenta")
+                    
+                    draw.text((center_x - text_width//2, center_y - text_height//2), result_text, 
+                             fill="magenta", font=font)
+                else:
+                    draw.text((center_x, center_y), result_text, fill="magenta")
 
     def _try_show_calibration_dialog(self, pixel_distance: float):
         """Fallback method to show calibration dialog"""

@@ -110,7 +110,7 @@ class ImageManager:
         try:
             return ImageTk.PhotoImage(display_image)
         except Exception as e:
-            print(f"Error creating PhotoImage: {e}")
+            # Error creating PhotoImage, return None
             return None
     
     def _calculate_max_zoom(self):
@@ -130,7 +130,6 @@ class ImageManager:
         # Ensure we can zoom to at least 2x, but no more than 20x
         self.max_zoom_level = max(2.0, min(20.0, calculated_max))
         
-        print(f"?? ZOOM CALC: Image {width}x{height}, Max zoom: {self.max_zoom_level:.1f}x ({self.max_zoom_level*100:.0f}%)")
     
     def get_max_zoom(self) -> float:
         """Get maximum zoom level for current image"""
@@ -180,7 +179,7 @@ class ImageManager:
             )
             return resized_image
         except Exception as e:
-            print(f"Error resizing image: {e}")
+            # Error resizing image, use fallback
             # Fallback: return copy of original
             return original_image.copy()
     

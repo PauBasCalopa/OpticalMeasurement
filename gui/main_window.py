@@ -331,24 +331,29 @@ class OpticalMeasurementApp:
     
     def select_tool(self, tool_name: str):
         """Select measurement tool"""
-        if tool_name in ["distance", "radius"] and not app_state.is_calibrated:
+        # ? PHASE 3: Check calibration requirements for new tools
+        if tool_name in ["distance", "radius", "polygon_area", "point_to_line", "arc_length"] and not app_state.is_calibrated:
             messagebox.showwarning("Warning", "Please calibrate the image first")
             return
         
-        if tool_name in ["angle", "two_line_angle"] and not app_state.is_image_loaded:
+        if tool_name in ["angle", "two_line_angle", "coordinate"] and not app_state.is_image_loaded:
             messagebox.showwarning("Warning", "Please load an image first")
             return
         
         app_state.set_active_tool(tool_name)
         self.canvas.set_tool(tool_name)
         
-        # Provide clear status messages for each tool
+        # ? PHASE 3: Enhanced status messages for all tools
         tool_messages = {
             "pan": "Pan mode - Right-click and drag to pan anytime",
             "distance": "Distance mode - Click two points to measure distance",
             "radius": "Radius mode - Click three points on circle edge",
             "angle": "Angle mode - Click three points (vertex in middle)",
-            "two_line_angle": "Two-Line Angle mode - Click four points (two per line)"
+            "two_line_angle": "Two-Line Angle mode - Click four points (two per line)",
+            "polygon_area": "Polygon Area mode - Click points to define polygon (right-click to finish)",
+            "coordinate": "Coordinate mode - Click point(s) to show coordinates or differences",
+            "point_to_line": "Point-to-Line mode - Click point, then two points to define line",
+            "arc_length": "Arc Length mode - Click three points along the arc"
         }
         
         message = tool_messages.get(tool_name, f"Tool: {tool_name.title()}")

@@ -190,6 +190,33 @@ class MenuManager:
             accelerator="F8"
         )
         
+        self.tools_menu.add_separator()
+        
+        # ? PHASE 3: Advanced Measurement Tools
+        self.tools_menu.add_command(
+            label="Polygon Area",
+            command=lambda: self.app.select_tool("polygon_area"),
+            accelerator="F9"
+        )
+        
+        self.tools_menu.add_command(
+            label="Point Coordinates",
+            command=lambda: self.app.select_tool("coordinate"),
+            accelerator="F10"
+        )
+        
+        self.tools_menu.add_command(
+            label="Point-to-Line Distance",
+            command=lambda: self.app.select_tool("point_to_line"),
+            accelerator="F11"
+        )
+        
+        self.tools_menu.add_command(
+            label="Arc Length",
+            command=lambda: self.app.select_tool("arc_length"),
+            accelerator="F12"
+        )
+        
         # TODO: Add more measurement tools
         
         self.tools_menu.add_separator()
@@ -245,6 +272,11 @@ class MenuManager:
         self.root.bind('<F6>', lambda e: self.app.select_tool("radius"))
         self.root.bind('<F7>', lambda e: self.app.select_tool("angle"))
         self.root.bind('<F8>', lambda e: self.app.select_tool("two_line_angle"))
+        # ? PHASE 3: Advanced measurement shortcuts
+        self.root.bind('<F9>', lambda e: self.app.select_tool("polygon_area"))
+        self.root.bind('<F10>', lambda e: self.app.select_tool("coordinate"))
+        self.root.bind('<F11>', lambda e: self.app.select_tool("point_to_line"))
+        self.root.bind('<F12>', lambda e: self.app.select_tool("arc_length"))
         self.root.bind('<Escape>', lambda e: self.reset_tools())
         
         # Help shortcuts
@@ -313,6 +345,10 @@ F5        Distance Measurement
 F6        Radius Measurement
 F7        Angle Measurement
 F8        Two-Line Angle
+F9        Polygon Area
+F10       Point Coordinates
+F11       Point-to-Line Distance
+F12       Arc Length
 Esc       Reset Tools
 
 Measurements:
@@ -374,3 +410,8 @@ General:
         self.tools_menu.entryconfig("Radius Measurement", state=tk.NORMAL if is_calibrated else tk.DISABLED)
         self.tools_menu.entryconfig("Angle Measurement", state=tk.NORMAL if image_loaded else tk.DISABLED)
         self.tools_menu.entryconfig("Two-Line Angle", state=tk.NORMAL if image_loaded else tk.DISABLED)
+        # ? PHASE 3: Advanced measurement tool states
+        self.tools_menu.entryconfig("Polygon Area", state=tk.NORMAL if is_calibrated else tk.DISABLED)
+        self.tools_menu.entryconfig("Point Coordinates", state=tk.NORMAL if image_loaded else tk.DISABLED)
+        self.tools_menu.entryconfig("Point-to-Line Distance", state=tk.NORMAL if is_calibrated else tk.DISABLED)
+        self.tools_menu.entryconfig("Arc Length", state=tk.NORMAL if is_calibrated else tk.DISABLED)

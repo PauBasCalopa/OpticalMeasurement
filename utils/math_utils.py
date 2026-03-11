@@ -143,6 +143,66 @@ def calculate_point_to_line_distance(point: Tuple[float, float],
     
     return numerator / denominator
 
+def find_closest_point_on_line(point: Tuple[float, float], 
+                              line_start: Tuple[float, float], 
+                              line_end: Tuple[float, float]) -> Tuple[float, float]:
+    """Find the closest point on a line segment to a given point"""
+    # Point coordinates
+    px, py = point
+    x1, y1 = line_start
+    x2, y2 = line_end
+    
+    # Vector from line_start to line_end
+    dx = x2 - x1
+    dy = y2 - y1
+    
+    # If line_start and line_end are the same point
+    if dx == 0 and dy == 0:
+        return line_start
+    
+    # Calculate parameter t for the closest point
+    # Closest point = line_start + t * (line_end - line_start)
+    t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)
+    
+    # Clamp t to [0, 1] to stay within the line segment
+    t = max(0, min(1, t))
+    
+    # Calculate the closest point
+    closest_x = x1 + t * dx
+    closest_y = y1 + t * dy
+    
+    return (closest_x, closest_y)
+
+def get_perpendicular_point_on_line(point: Tuple[float, float], 
+                                   line_start: Tuple[float, float], 
+                                   line_end: Tuple[float, float]) -> Tuple[float, float]:
+    """Find the perpendicular point on an infinite line from a given point
+    
+    This is similar to find_closest_point_on_line but doesn't clamp to the line segment.
+    """
+    # Point coordinates
+    px, py = point
+    x1, y1 = line_start
+    x2, y2 = line_end
+    
+    # Vector from line_start to line_end
+    dx = x2 - x1
+    dy = y2 - y1
+    
+    # If line_start and line_end are the same point
+    if dx == 0 and dy == 0:
+        return line_start
+    
+    # Calculate parameter t for the perpendicular point
+    # Perpendicular point = line_start + t * (line_end - line_start)
+    t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)
+    
+    # Don't clamp t - allow point to be outside the line segment
+    perp_x = x1 + t * dx
+    perp_y = y1 + t * dy
+    
+    return (perp_x, perp_y)
+
 def calculate_arc_length(p1: Tuple[float, float], p2: Tuple[float, float], 
                         p3: Tuple[float, float]) -> float:
     """Calculate arc length through three points"""
