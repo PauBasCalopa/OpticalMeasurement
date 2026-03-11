@@ -23,7 +23,19 @@ class MeasurementBase:
     def __post_init__(self):
         """Post-initialization setup"""
         if not self.label:
-            self.label = f"{self.measurement_type.title()} {self.id[:8]}"
+            # Create more descriptive default labels
+            type_names = {
+                "distance": "Distance",
+                "radius": "Radius", 
+                "angle": "Angle",
+                "two_line_angle": "Line Angle",
+                "polygon_area": "Area",
+                "coordinate": "Coordinate",
+                "point_to_line": "P-to-Line",
+                "arc_length": "Arc Length"
+            }
+            type_name = type_names.get(self.measurement_type, self.measurement_type.title())
+            self.label = f"{type_name} {self.id[:8]}"
 
 @dataclass
 class DistanceMeasurement(MeasurementBase):

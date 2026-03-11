@@ -140,10 +140,9 @@ class MenuManager:
         
         # TODO: Implement show/hide overlays
         self.view_menu.add_command(
-            label="Show/Hide Overlays",
-            command=self.not_implemented,
-            accelerator="F2",
-            state=tk.DISABLED
+            label="Hide Overlays",
+            command=self.toggle_overlays,
+            accelerator="F2"
         )
         
         self.view_menu.add_separator()
@@ -183,6 +182,12 @@ class MenuManager:
             label="Angle Measurement",
             command=lambda: self.app.select_tool("angle"),
             accelerator="F7"
+        )
+        
+        self.tools_menu.add_command(
+            label="Two-Line Angle",
+            command=lambda: self.app.select_tool("two_line_angle"),
+            accelerator="F8"
         )
         
         # TODO: Add more measurement tools
@@ -232,12 +237,14 @@ class MenuManager:
         self.root.bind('<Control-1>', lambda e: self.app.canvas.set_zoom(1.0))
         self.root.bind('<Control-r>', lambda e: self.reset_view())
         self.root.bind('<space>', lambda e: self.app.select_tool("pan"))  # Keep space for pan
+        self.root.bind('<F2>', lambda e: self.toggle_overlays())  # ? NEW: F2 for overlay toggle
         
         # Tools menu shortcuts
         self.root.bind('<F4>', lambda e: self.app.start_calibration())
         self.root.bind('<F5>', lambda e: self.app.select_tool("distance"))
         self.root.bind('<F6>', lambda e: self.app.select_tool("radius"))
         self.root.bind('<F7>', lambda e: self.app.select_tool("angle"))
+        self.root.bind('<F8>', lambda e: self.app.select_tool("two_line_angle"))
         self.root.bind('<Escape>', lambda e: self.reset_tools())
         
         # Help shortcuts
@@ -247,10 +254,39 @@ class MenuManager:
         """Reset view to fit image"""
         self.app.canvas.zoom_fit()
         self.app.canvas.center_image()
+        # ? FIX: Ensure overlays are redrawn after view reset
+        self.app.canvas.redraw_all_overlays()
     
     def reset_tools(self):
         """Reset to pan tool"""
         self.app.select_tool("pan")
+    
+    def toggle_overlays(self):
+        """Toggle measurement overlay visibility"""
+        if hasattr(self.app, 'canvas'):
+            visible = self.app.canvas.toggle_overlays_visibility()
+            
+            # Update menu text based on current state
+            menu_text = "Hide Overlays" if visible else "Show Overlays"
+            
+            # Find and update the overlay menu item
+            try:
+                for i in range(self.view_menu.index(tk.END) + 1):
+                    try:
+                        menu_label = self.view_menu.entrycget(i, "label")
+                        if "Overlays" in menu_label:
+                            self.view_menu.entryconfig(i, label=menu_text)
+                            break
+                    except:
+                        continue
+            except:
+                pass
+            
+            # Update status
+            status = "shown" if visible else "hidden" 
+            self.app.status_label.config(text=f"Overlays {status}")
+        else:
+            messagebox.showinfo("No Canvas", "No image canvas available")
     
     def show_shortcuts(self):
         """Show keyboard shortcuts dialog"""
@@ -262,20 +298,22 @@ File Operations:
   Ctrl+E    Export Image
 
 View:
-  Ctrl++    Zoom In
-  Ctrl+-    Zoom Out
-  Ctrl+0    Zoom to Fit
-  Ctrl+1    Actual Size
-  Ctrl+R    Reset View
-  Space     Pan
-  Right Click    Pan (hold and drag)
+Ctrl++    Zoom In
+Ctrl+-    Zoom Out
+Ctrl+0    Zoom to Fit
+Ctrl+1    Actual Size
+Ctrl+R    Reset View
+Space     Pan
+Right Click    Pan (hold and drag)
+F2        Show/Hide Overlays
 
 Tools:
-  F4        Calibration
-  F5        Distance Measurement
-  F6        Radius Measurement
-  F7        Angle Measurement
-  Esc       Reset Tools
+F4        Calibration
+F5        Distance Measurement
+F6        Radius Measurement
+F7        Angle Measurement
+F8        Two-Line Angle
+Esc       Reset Tools
 
 Measurements:
   Delete              Delete Selected
@@ -314,8 +352,25 @@ General:
         # Update View menu  
         self.view_menu.entryconfig("Pan", state=tk.NORMAL if image_loaded else tk.DISABLED)
         
+        # Enable overlay toggle only when measurements exist
+        overlay_state = tk.NORMAL if has_measurements else tk.DISABLED
+        
+        # Update overlay menu item - find it by checking for "Overlays" in the label
+        try:
+            for i in range(self.view_menu.index(tk.END) + 1):
+                try:
+                    menu_label = self.view_menu.entrycget(i, "label")
+                    if "Overlays" in menu_label:
+                        self.view_menu.entryconfig(i, state=overlay_state)
+                        break
+                except:
+                    continue
+        except:
+            pass  # Menu item might not exist yet
+        
         # Update Tools menu
         self.tools_menu.entryconfig("Calibration", state=tk.NORMAL if image_loaded else tk.DISABLED)
         self.tools_menu.entryconfig("Distance Measurement", state=tk.NORMAL if is_calibrated else tk.DISABLED)
         self.tools_menu.entryconfig("Radius Measurement", state=tk.NORMAL if is_calibrated else tk.DISABLED)
         self.tools_menu.entryconfig("Angle Measurement", state=tk.NORMAL if image_loaded else tk.DISABLED)
+        self.tools_menu.entryconfig("Two-Line Angle", state=tk.NORMAL if image_loaded else tk.DISABLED)

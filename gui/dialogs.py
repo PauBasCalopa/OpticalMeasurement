@@ -187,11 +187,12 @@ class AboutDialog:
         title_label.pack(pady=(0, 10))
         
         # Version
-        version_label = ttk.Label(main_frame, text="Version 2.0")
+        version_label = ttk.Label(main_frame, text="Version 2.1")
         version_label.pack(pady=(0, 15))
         
         # Description - using simple text without bullet points to avoid encoding issues
         description = """A desktop application for precise measurements on digital images.
+
                         By: Pau Bas Calopa (C) 2026."""
         
         description_label = ttk.Label(
@@ -210,3 +211,128 @@ class AboutDialog:
         
         # Bind Escape key
         self.dialog.bind("<Escape>", lambda e: self.dialog.destroy())
+
+class MeasurementPropertiesDialog:
+    """Dialog for editing measurement properties"""
+    
+    def __init__(self, parent, measurement):
+        self.parent = parent
+        self.measurement = measurement
+        self.result: Optional[dict] = None
+        
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("Measurement Properties")
+        self.dialog.geometry("400x300")
+        self.dialog.resizable(False, False)
+        
+        # Make dialog modal
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        # Center dialog
+        self.center_dialog()
+        
+        self.create_widgets()
+    
+    def center_dialog(self):
+        """Center dialog on parent window"""
+        self.dialog.update_idletasks()
+        
+        parent_x = self.parent.winfo_rootx()
+        parent_y = self.parent.winfo_rooty()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        
+        dialog_width = self.dialog.winfo_width()
+        dialog_height = self.dialog.winfo_height()
+        
+        x = parent_x + (parent_width - dialog_width) // 2
+        y = parent_y + (parent_height - dialog_height) // 2
+        
+        self.dialog.geometry(f"+{x}+{y}")
+    
+    def create_widgets(self):
+        """Create dialog widgets"""
+        # Main frame
+        main_frame = ttk.Frame(self.dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Title
+        title_label = ttk.Label(
+            main_frame,
+            text=f"Edit {self.measurement.measurement_type.title()} Properties",
+            font=("TkDefaultFont", 12, "bold")
+        )
+        title_label.pack(pady=(0, 15))
+        
+        # Label input
+        label_frame = ttk.LabelFrame(main_frame, text="Label", padding="10")
+        label_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.label_var = tk.StringVar(value=self.measurement.label)
+        label_entry = ttk.Entry(label_frame, textvariable=self.label_var, width=30)
+        label_entry.pack(fill=tk.X)
+        label_entry.focus()
+        
+        # Measurement info
+        info_frame = ttk.LabelFrame(main_frame, text="Measurement Info", padding="10")
+        info_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        # Type
+        type_label = ttk.Label(info_frame, text=f"Type: {self.measurement.measurement_type.replace('_', ' ').title()}")
+        type_label.pack(anchor=tk.W)
+        
+        # Result
+        if self.measurement.result is not None:
+            result_label = ttk.Label(info_frame, text=f"Value: {self.measurement.result:.3f}")
+            result_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Points count
+        points_count = len(self.measurement.points)
+        points_label = ttk.Label(info_frame, text=f"Points: {points_count}")
+        points_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Timestamp
+        timestamp_str = self.measurement.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        timestamp_label = ttk.Label(info_frame, text=f"Created: {timestamp_str}")
+        timestamp_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # ID (for technical users)
+        id_label = ttk.Label(info_frame, text=f"ID: {self.measurement.id[:8]}...", 
+                            font=("TkDefaultFont", 8), foreground="gray")
+        id_label.pack(anchor=tk.W, pady=(10, 0))
+        
+        # Buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+        
+        ttk.Button(
+            button_frame, 
+            text="Cancel", 
+            command=self.cancel
+        ).pack(side=tk.RIGHT, padx=(5, 0))
+        
+        ttk.Button(
+            button_frame, 
+            text="OK", 
+            command=self.ok
+        ).pack(side=tk.RIGHT)
+        
+        # Bind keys
+        self.dialog.bind("<Return>", lambda e: self.ok())
+        self.dialog.bind("<Escape>", lambda e: self.cancel())
+    
+    def ok(self):
+        """Handle OK button"""
+        label = self.label_var.get().strip()
+        if not label:
+            messagebox.showerror("Invalid Input", "Label cannot be empty")
+            return
+        
+        self.result = {"label": label}
+        self.dialog.destroy()
+    
+    def cancel(self):
+        """Handle Cancel button"""
+        self.result = None
+        self.dialog.destroy()

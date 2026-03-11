@@ -47,6 +47,7 @@ class ImageCanvas(Canvas):
         # Overlays
         self.measurement_overlays = {}  # measurement_id -> canvas_items
         self.temp_overlays = []  # temporary drawing items
+        self.overlays_visible = True  # ? NEW: Track overlay visibility state
         
         # Bind events
         self.bind_events()
@@ -113,6 +114,10 @@ class ImageCanvas(Canvas):
     
     def redraw_all_overlays(self):
         """Redraw all measurement overlays at current zoom/pan position"""
+        # Only redraw if overlays should be visible
+        if not self.overlays_visible:
+            return
+            
         # Simple approach: just redraw all overlays using stored image coordinates
         from core.app_state import app_state
         
@@ -273,7 +278,7 @@ class ImageCanvas(Canvas):
         elif self.current_tool == "pan":
             # Left-click pan (traditional behavior, still available when pan tool is active)
             self.pan_start = (event.x, event.y)
-        elif self.current_tool in ["distance", "radius", "angle"]:
+        elif self.current_tool in ["distance", "radius", "angle", "two_line_angle"]:
             self.handle_measurement_click(event)
     
     def on_left_drag(self, event):
@@ -422,7 +427,8 @@ class ImageCanvas(Canvas):
         points_needed = {
             "distance": 2,
             "radius": 3,
-            "angle": 3
+            "angle": 3,
+            "two_line_angle": 4
         }
         
         if len(self.temp_points) >= points_needed.get(self.current_tool, 2):
@@ -442,6 +448,10 @@ class ImageCanvas(Canvas):
             elif self.current_tool == "angle" and len(self.temp_points) >= 3:
                 measurement = self.measurement_engine.calculate_angle_measurement(
                     self.temp_points[0], self.temp_points[1], self.temp_points[2]
+                )
+            elif self.current_tool == "two_line_angle" and len(self.temp_points) >= 4:
+                measurement = self.measurement_engine.calculate_two_line_angle_measurement(
+                    self.temp_points[0], self.temp_points[1], self.temp_points[2], self.temp_points[3]
                 )
             else:
                 return
@@ -465,6 +475,10 @@ class ImageCanvas(Canvas):
     
     def draw_measurement_overlay(self, measurement: MeasurementBase):
         """Draw measurement overlay on canvas"""
+        # Don't draw if overlays are hidden
+        if not self.overlays_visible:
+            return
+            
         overlay_items = []
         
         if measurement.measurement_type == "distance":
@@ -550,6 +564,43 @@ class ImageCanvas(Canvas):
                 )
                 overlay_items.append(text_id)
         
+        elif measurement.measurement_type == "two_line_angle":
+            # Draw two lines and angle between them
+            if len(measurement.points) >= 4:
+                # First line
+                line1_p1_screen = self.image_to_screen_coords(*measurement.points[0])
+                line1_p2_screen = self.image_to_screen_coords(*measurement.points[1])
+                
+                # Second line  
+                line2_p1_screen = self.image_to_screen_coords(*measurement.points[2])
+                line2_p2_screen = self.image_to_screen_coords(*measurement.points[3])
+                
+                # Draw first line
+                line1_id = self.create_line(
+                    line1_p1_screen[0], line1_p1_screen[1], line1_p2_screen[0], line1_p2_screen[1],
+                    fill="purple", width=2, tags=f"measurement_{measurement.id}"
+                )
+                overlay_items.append(line1_id)
+                
+                # Draw second line
+                line2_id = self.create_line(
+                    line2_p1_screen[0], line2_p1_screen[1], line2_p2_screen[0], line2_p2_screen[1],
+                    fill="purple", width=2, tags=f"measurement_{measurement.id}"
+                )
+                overlay_items.append(line2_id)
+                
+                # Draw result text in center of the two lines
+                center_x = (line1_p1_screen[0] + line1_p2_screen[0] + line2_p1_screen[0] + line2_p2_screen[0]) / 4
+                center_y = (line1_p1_screen[1] + line1_p2_screen[1] + line2_p1_screen[1] + line2_p2_screen[1]) / 4
+                
+                result_text = self.measurement_engine.format_measurement_result(measurement)
+                text_id = self.create_text(
+                    center_x, center_y - 15,
+                    text=result_text, fill="purple", font=("Arial", 8),
+                    tags=f"measurement_{measurement.id}"
+                )
+                overlay_items.append(text_id)
+        
         # Store overlay items
         self.measurement_overlays[measurement.id] = overlay_items
     
@@ -571,7 +622,39 @@ class ImageCanvas(Canvas):
         self.delete("temp")
         self.temp_overlays.clear()
     
-    def export_image(self, filename: str):
+    def toggle_overlays_visibility(self):
+        """Toggle visibility of all measurement overlays"""
+        self.overlays_visible = not self.overlays_visible
+        
+        if self.overlays_visible:
+            # Show overlays - make all overlay items visible again
+            for measurement_id in self.measurement_overlays:
+                for item_id in self.measurement_overlays[measurement_id]:
+                    try:
+                        self.itemconfig(item_id, state="normal")
+                    except:
+                        pass  # Item might have been deleted
+            # Also redraw to ensure everything is current
+            self.redraw_all_overlays()
+        else:
+            # Hide overlays - hide all overlay items
+            for measurement_id in self.measurement_overlays:
+                for item_id in self.measurement_overlays[measurement_id]:
+                    try:
+                        self.itemconfig(item_id, state="hidden")
+                    except:
+                        pass  # Item might have been deleted
+        
+        return self.overlays_visible
+    
+    def set_overlays_visibility(self, visible: bool):
+        """Set overlay visibility state"""
+        if self.overlays_visible != visible:
+            self.toggle_overlays_visibility()
+    
+    def get_overlays_visibility(self) -> bool:
+        """Get current overlay visibility state"""
+        return self.overlays_visible
         """Export image with overlays"""
         if not self.current_image or not self.current_image.original_image:
             raise ValueError("No image to export")

@@ -13,7 +13,7 @@ from core.image_manager import ImageManager
 from core.measurement_engine import MeasurementEngine
 from models.calibration_data import CalibrationData
 from gui.canvas_widget import ImageCanvas
-from gui.dialogs import CalibrationDialog
+from gui.dialogs import CalibrationDialog, MeasurementPropertiesDialog
 from gui.menus import MenuManager
 
 class OpticalMeasurementApp:
@@ -132,8 +132,11 @@ class OpticalMeasurementApp:
         self.measurements_listbox = tk.Listbox(listbox_frame)
         self.measurements_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        # Add double-click to delete functionality
-        self.measurements_listbox.bind("<Double-Button-1>", lambda e: self.delete_selected_measurement())
+        # Add double-click to edit properties functionality
+        self.measurements_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_measurement())
+        
+        # Add right-click context menu
+        self.measurements_listbox.bind("<Button-3>", self.show_measurement_context_menu)
         
         measurements_scrollbar = ttk.Scrollbar(listbox_frame, orient=tk.VERTICAL)
         measurements_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -144,6 +147,13 @@ class OpticalMeasurementApp:
         # Measurement buttons
         meas_buttons_frame = ttk.Frame(self.measurements_frame)
         meas_buttons_frame.pack(fill=tk.X, pady=5)
+        
+        self.properties_measurement_btn = ttk.Button(
+            meas_buttons_frame, 
+            text="Properties", 
+            command=self.edit_selected_measurement
+        )
+        self.properties_measurement_btn.pack(side=tk.LEFT, padx=2)
         
         self.delete_measurement_btn = ttk.Button(
             meas_buttons_frame, 
@@ -207,6 +217,7 @@ class OpticalMeasurementApp:
         has_measurements = app_state.has_measurements
         
         # Update measurement buttons based on whether measurements exist
+        self.properties_measurement_btn.config(state=tk.NORMAL if has_measurements else tk.DISABLED)
         self.delete_measurement_btn.config(state=tk.NORMAL if has_measurements else tk.DISABLED)
         self.clear_measurements_btn.config(state=tk.NORMAL if has_measurements else tk.DISABLED)
         
@@ -321,13 +332,24 @@ class OpticalMeasurementApp:
             messagebox.showwarning("Warning", "Please calibrate the image first")
             return
         
-        if tool_name == "angle" and not app_state.is_image_loaded:
+        if tool_name in ["angle", "two_line_angle"] and not app_state.is_image_loaded:
             messagebox.showwarning("Warning", "Please load an image first")
             return
         
         app_state.set_active_tool(tool_name)
         self.canvas.set_tool(tool_name)
-        self.status_label.config(text=f"Tool: {tool_name.title()}")
+        
+        # Provide clear status messages for each tool
+        tool_messages = {
+            "pan": "Pan mode - Right-click and drag to pan anytime",
+            "distance": "Distance mode - Click two points to measure distance",
+            "radius": "Radius mode - Click three points on circle edge",
+            "angle": "Angle mode - Click three points (vertex in middle)",
+            "two_line_angle": "Two-Line Angle mode - Click four points (two per line)"
+        }
+        
+        message = tool_messages.get(tool_name, f"Tool: {tool_name.title()}")
+        self.status_label.config(text=message)
     
     def delete_selected_measurement(self):
         """Delete selected measurement"""
@@ -366,6 +388,56 @@ class OpticalMeasurementApp:
             # Clear from app state
             app_state.clear_measurements()
             self.status_label.config(text="All measurements cleared")
+    
+    def edit_selected_measurement(self):
+        """Edit selected measurement properties"""
+        selection = self.measurements_listbox.curselection()
+        if not selection:
+            messagebox.showinfo("Selection Required", "Please select a measurement to edit")
+            return
+        
+        index = selection[0]
+        if 0 <= index < len(app_state.measurements):
+            measurement = app_state.measurements[index]
+            
+            try:
+                dialog = MeasurementPropertiesDialog(self.root, measurement)
+                self.root.wait_window(dialog.dialog)
+                
+                if dialog.result:
+                    # Update measurement properties
+                    old_label = measurement.label
+                    measurement.label = dialog.result["label"]
+                    
+                    # Update the display
+                    self.update_measurements_list()
+                    self.status_label.config(text=f"Updated measurement: {measurement.label}")
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to edit measurement: {e}")
+        else:
+            messagebox.showerror("Error", "Invalid selection index")
+    
+    def show_measurement_context_menu(self, event):
+        """Show context menu for measurements list"""
+        # Select the item under cursor
+        index = self.measurements_listbox.nearest(event.y)
+        if 0 <= index < self.measurements_listbox.size():
+            self.measurements_listbox.selection_clear(0, tk.END)
+            self.measurements_listbox.selection_set(index)
+            self.measurements_listbox.activate(index)
+            
+            # Create context menu
+            context_menu = tk.Menu(self.root, tearoff=0)
+            context_menu.add_command(label="Properties", command=self.edit_selected_measurement)
+            context_menu.add_separator()
+            context_menu.add_command(label="Delete", command=self.delete_selected_measurement)
+            
+            # Show menu at cursor position
+            try:
+                context_menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                context_menu.grab_release()
     
     def show_calibration_dialog(self, pixel_distance: float):
         """Show calibration input dialog"""
