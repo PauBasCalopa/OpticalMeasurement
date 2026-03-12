@@ -20,6 +20,12 @@ def main():
         # Create root window
         root = tk.Tk()
         
+        # Set window icon
+        import os
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.ico")
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+        
         # Create application
         app = OpticalMeasurementApp(root)
         

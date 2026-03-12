@@ -108,6 +108,7 @@ class PolygonAreaMeasurement(MeasurementBase):
     """Multi-point polygon area measurement"""
     
     is_closed: bool = False
+    perimeter: float = 0.0
     
     def __post_init__(self):
         self.measurement_type = "polygon_area"

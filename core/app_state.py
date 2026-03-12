@@ -36,6 +36,16 @@ class ApplicationState:
         self.active_tool: Optional[str] = None
         self.view_state: ViewState = ViewState()
         
+        # Grid state
+        self.grid_visible: bool = False
+        self.grid_spacing: int = 50
+        self.grid_color: str = "#cccccc"
+        self.grid_opacity: float = 0.5
+        
+        # Image adjustment state
+        self.brightness: float = 1.0
+        self.contrast: float = 1.0
+        
         # Legacy accessors (kept for compatibility during migration)
         self.zoom_level: float = 1.0
         self.pan_offset: tuple = (0, 0)
@@ -191,6 +201,33 @@ class ApplicationState:
         """Set active measurement tool"""
         self.active_tool = tool_name
         self.notify_observers("tool_changed", tool_name)
+    
+    def toggle_grid(self):
+        """Toggle grid visibility"""
+        self.grid_visible = not self.grid_visible
+        self.notify_observers("grid_changed", self.grid_visible)
+    
+    def set_grid_settings(self, spacing: int, color: str):
+        """Update grid settings"""
+        self.grid_spacing = spacing
+        self.grid_color = color
+        self.notify_observers("grid_changed", self.grid_visible)
+    
+    def set_brightness(self, value: float):
+        """Set brightness adjustment (1.0 = original)"""
+        self.brightness = value
+        self.notify_observers("image_adjustment_changed", {"brightness": value, "contrast": self.contrast})
+    
+    def set_contrast(self, value: float):
+        """Set contrast adjustment (1.0 = original)"""
+        self.contrast = value
+        self.notify_observers("image_adjustment_changed", {"brightness": self.brightness, "contrast": value})
+    
+    def reset_adjustments(self):
+        """Reset brightness and contrast to defaults"""
+        self.brightness = 1.0
+        self.contrast = 1.0
+        self.notify_observers("image_adjustment_changed", {"brightness": 1.0, "contrast": 1.0})
     
     def set_zoom_level(self, zoom: float):
         """Set zoom level"""

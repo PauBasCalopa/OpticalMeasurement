@@ -141,6 +141,13 @@ class ImageCanvas(Canvas):
         if self.is_calibrating:
             self.calibration_handler.redraw_calibration_overlays()
         
+        # Grid overlay
+        from core.app_state import app_state
+        if app_state.grid_visible:
+            self.overlay_renderer.render_grid(vs, app_state.grid_spacing, app_state.grid_color)
+        else:
+            self.overlay_renderer.clear_grid()
+        
         # Update scroll region
         iw = self.photo_image.width()
         ih = self.photo_image.height()

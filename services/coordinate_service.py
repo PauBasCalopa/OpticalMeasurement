@@ -58,8 +58,8 @@ class CoordinateService:
         image_y = (screen_y - vs.pan_y) / vs.zoom
         
         # New pan so that image_x,image_y maps back to screen_x,screen_y at new zoom
-        new_pan_x = screen_x - image_x * new_zoom
-        new_pan_y = screen_y - image_y * new_zoom
+        new_pan_x = round(screen_x - image_x * new_zoom)
+        new_pan_y = round(screen_y - image_y * new_zoom)
         
         new_vs = vs.with_zoom(new_zoom).with_pan(new_pan_x, new_pan_y)
         return CoordinateService.clamp_pan(new_vs)
@@ -84,8 +84,8 @@ class CoordinateService:
         # Center the image
         display_w = vs.image_width * zoom
         display_h = vs.image_height * zoom
-        pan_x = (vs.canvas_width - display_w) / 2
-        pan_y = (vs.canvas_height - display_h) / 2
+        pan_x = round((vs.canvas_width - display_w) / 2)
+        pan_y = round((vs.canvas_height - display_h) / 2)
         
         return vs.with_zoom(zoom).with_pan(pan_x, pan_y)
     
@@ -97,8 +97,8 @@ class CoordinateService:
         
         display_w = vs.image_width * vs.zoom
         display_h = vs.image_height * vs.zoom
-        pan_x = (vs.canvas_width - display_w) / 2
-        pan_y = (vs.canvas_height - display_h) / 2
+        pan_x = round((vs.canvas_width - display_w) / 2)
+        pan_y = round((vs.canvas_height - display_h) / 2)
         
         new_vs = vs.with_pan(pan_x, pan_y)
         return CoordinateService.clamp_pan(new_vs)
@@ -146,6 +146,11 @@ class CoordinateService:
             max_y = margin
             pan_y = max(min_y, min(max_y, pan_y))
         
+        # Round to integers so ViewState matches the actual int position
+        # where the image is placed on the canvas (create_image / coords).
+        pan_x = round(pan_x)
+        pan_y = round(pan_y)
+
         if pan_x == vs.pan_x and pan_y == vs.pan_y:
             return vs
         return vs.with_pan(pan_x, pan_y)

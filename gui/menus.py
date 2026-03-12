@@ -142,6 +142,17 @@ class MenuManager:
             accelerator="F2"
         )
         
+        self.view_menu.add_command(
+            label="Show Grid",
+            command=self.toggle_grid,
+            accelerator="G"
+        )
+        
+        self.view_menu.add_command(
+            label="Grid Settings...",
+            command=self.show_grid_settings
+        )
+        
         self.view_menu.add_separator()
         
         self.view_menu.add_command(
@@ -264,6 +275,7 @@ class MenuManager:
         self.root.bind('<Control-r>', lambda e: self.reset_view())
         self.root.bind('<space>', lambda e: self.app.select_tool("pan"))  # Keep space for pan
         self.root.bind('<F2>', lambda e: self.toggle_overlays())  # ? NEW: F2 for overlay toggle
+        self.root.bind('<g>', lambda e: self.toggle_grid())  # Grid toggle
         
         # Tools menu shortcuts
         self.root.bind('<F4>', lambda e: self.app.start_calibration())
@@ -318,6 +330,33 @@ class MenuManager:
             self.app.status_label.config(text=f"Overlays {status}")
         else:
             messagebox.showinfo("No Canvas", "No image canvas available")
+    
+    def toggle_grid(self):
+        """Toggle grid overlay"""
+        from core.app_state import app_state
+        app_state.toggle_grid()
+        # Update menu text
+        menu_text = "Hide Grid" if app_state.grid_visible else "Show Grid"
+        try:
+            for i in range(self.view_menu.index(tk.END) + 1):
+                try:
+                    label = self.view_menu.entrycget(i, "label")
+                    if "Grid" == label.split()[-1]:
+                        self.view_menu.entryconfig(i, label=menu_text)
+                        break
+                except:
+                    continue
+        except:
+            pass
+    
+    def show_grid_settings(self):
+        """Show grid settings dialog"""
+        from core.app_state import app_state
+        from gui.dialogs import GridSettingsDialog
+        dialog = GridSettingsDialog(self.root, app_state.grid_spacing, app_state.grid_color)
+        self.root.wait_window(dialog.dialog)
+        if dialog.result:
+            app_state.set_grid_settings(dialog.result["spacing"], dialog.result["color"])
     
     def show_shortcuts(self):
         """Show keyboard shortcuts dialog"""

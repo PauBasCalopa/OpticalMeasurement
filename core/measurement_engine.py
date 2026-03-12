@@ -98,13 +98,17 @@ class MeasurementEngine:
         # Calculate pixel area
         pixel_area = calculate_polygon_area(points)
         
+        # Calculate pixel perimeter
+        pixel_perimeter = calculate_polygon_perimeter(points)
+        
         # Convert to real-world units if calibrated
         if self.calibration and self.calibration.is_calibrated:
-            # Area scales with square of the scale factor
             scale_factor_squared = self.calibration.scale_factor ** 2
             measurement.result = pixel_area * scale_factor_squared
+            measurement.perimeter = self.calibration.pixels_to_units(pixel_perimeter)
         else:
             measurement.result = pixel_area
+            measurement.perimeter = pixel_perimeter
         
         return measurement
     
@@ -214,10 +218,10 @@ class MeasurementEngine:
                 return f"{measurement.result:.{decimal_places}f} px"
                 
         elif measurement.measurement_type == "polygon_area":
-            if self.calibration and self.calibration.is_calibrated:
-                return f"{measurement.result:.{decimal_places}f} units^2"
-            else:
-                return f"{measurement.result:.{decimal_places}f} px^2"
+            unit = "units" if (self.calibration and self.calibration.is_calibrated) else "px"
+            area_str = f"Area: {measurement.result:.{decimal_places}f} {unit}\u00b2"
+            perim_str = f"Perim: {measurement.perimeter:.{decimal_places}f} {unit}"
+            return f"{area_str} | {perim_str}"
                 
         elif measurement.measurement_type in ["angle", "two_line_angle"]:
             return f"{measurement.result:.{decimal_places}f} degrees"

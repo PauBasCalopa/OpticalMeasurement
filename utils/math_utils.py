@@ -122,6 +122,16 @@ def calculate_polygon_area(points: List[Tuple[float, float]]) -> float:
     
     return area
 
+def calculate_polygon_perimeter(points: List[Tuple[float, float]]) -> float:
+    """Calculate polygon perimeter (sum of all edge lengths, including closing edge)."""
+    if len(points) < 2:
+        return 0.0
+    perimeter = 0.0
+    for i in range(len(points)):
+        ni = (i + 1) % len(points)
+        perimeter += calculate_distance(points[i], points[ni])
+    return perimeter
+
 def calculate_point_to_line_distance(point: Tuple[float, float], 
                                    line_start: Tuple[float, float], 
                                    line_end: Tuple[float, float]) -> float:

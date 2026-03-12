@@ -36,6 +36,8 @@ echo [4/4] Building distributable...
     --windowed ^
     --noconfirm ^
     --clean ^
+    --icon "assets\icon.ico" ^
+    --add-data "assets;assets" ^
     --add-data "core;core" ^
     --add-data "gui;gui" ^
     --add-data "models;models" ^

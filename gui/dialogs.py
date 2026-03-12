@@ -187,7 +187,7 @@ class AboutDialog:
         title_label.pack(pady=(0, 10))
         
         # Version
-        version_label = ttk.Label(main_frame, text="Version 2.2")
+        version_label = ttk.Label(main_frame, text="Version 2.3")
         version_label.pack(pady=(0, 15))
         
         # Description - using simple text without bullet points to avoid encoding issues
@@ -335,4 +335,56 @@ class MeasurementPropertiesDialog:
     def cancel(self):
         """Handle Cancel button"""
         self.result = None
+        self.dialog.destroy()
+
+
+class GridSettingsDialog:
+    """Dialog for grid overlay settings"""
+    
+    def __init__(self, parent, current_spacing: int = 50, current_color: str = "#cccccc"):
+        self.parent = parent
+        self.result: Optional[dict] = None
+        
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("Grid Settings")
+        self.dialog.geometry("300x180")
+        self.dialog.resizable(False, False)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        main_frame = ttk.Frame(self.dialog, padding="15")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main_frame, text="Grid Settings", font=("TkDefaultFont", 12, "bold")).pack(pady=(0, 10))
+        
+        # Spacing
+        spacing_frame = ttk.Frame(main_frame)
+        spacing_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(spacing_frame, text="Spacing (px):").pack(side=tk.LEFT)
+        self.spacing_var = tk.IntVar(value=current_spacing)
+        ttk.Spinbox(spacing_frame, from_=10, to=500, textvariable=self.spacing_var, width=8).pack(side=tk.RIGHT)
+        
+        # Color
+        color_frame = ttk.Frame(main_frame)
+        color_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(color_frame, text="Color:").pack(side=tk.LEFT)
+        self.color_var = tk.StringVar(value=current_color)
+        color_combo = ttk.Combobox(color_frame, textvariable=self.color_var, width=10,
+                                   values=["#cccccc", "#999999", "#666666", "#ff0000", "#00ff00", "#0000ff"])
+        color_combo.pack(side=tk.RIGHT)
+        
+        # Buttons
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+        ttk.Button(btn_frame, text="Cancel", command=self.dialog.destroy).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(btn_frame, text="OK", command=self._ok).pack(side=tk.RIGHT)
+        
+        self.dialog.bind("<Return>", lambda e: self._ok())
+        self.dialog.bind("<Escape>", lambda e: self.dialog.destroy())
+    
+    def _ok(self):
+        spacing = self.spacing_var.get()
+        if spacing < 10:
+            spacing = 10
+        self.result = {"spacing": spacing, "color": self.color_var.get()}
         self.dialog.destroy()

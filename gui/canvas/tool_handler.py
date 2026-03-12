@@ -69,6 +69,11 @@ class ToolHandler:
         
         # Measurement / polygon tools: convert to image coords, ask tool
         ix, iy = self.canvas.screen_to_image_coords(event.x, event.y)
+        # Clamp to image bounds so clicks outside the image don't produce
+        # invalid coordinates (e.g. after panning near the edge).
+        vs = self.canvas.view_state
+        ix = max(0, min(ix, vs.image_width - 1))
+        iy = max(0, min(iy, vs.image_height - 1))
         result = tool.handle_click(ix, iy, len(self.temp_points))
         self._process_result(result, ix, iy, event.x, event.y)
     

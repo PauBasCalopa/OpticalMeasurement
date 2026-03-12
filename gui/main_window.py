@@ -15,6 +15,8 @@ from models.calibration_data import CalibrationData
 from gui.canvas_widget import ImageCanvas
 from gui.dialogs import CalibrationDialog, MeasurementPropertiesDialog
 from gui.menus import MenuManager
+from gui.toolbar import ToolBar
+from gui.minimap_widget import MinimapWidget
 from services.export_service import ExportService
 
 class OpticalMeasurementApp:
@@ -49,23 +51,27 @@ class OpticalMeasurementApp:
         self.root.geometry("1200x800")
         self.root.minsize(800, 600)
         
-        # Configure grid weights (adjusted for no toolbar)
+        # Configure grid weights
         self.root.grid_columnconfigure(1, weight=1)
-        self.root.grid_rowconfigure(0, weight=1)  # Main content now at row 0
+        self.root.grid_rowconfigure(1, weight=1)  # Row 0 = toolbar, Row 1 = content
     
     def create_widgets(self):
         """Create and layout all widgets"""
-        # Create main frames (removed toolbar)
+        self.create_toolbar()
         self.create_main_content()
         self.create_sidebar()
         self.create_statusbar()
     
+    def create_toolbar(self):
+        """Create toolbar with tool buttons"""
+        self.toolbar = ToolBar(self.root, self)
+        self.toolbar.grid(row=0, column=0, columnspan=3, sticky="ew", padx=5, pady=(2, 0))
+    
     
     def create_main_content(self):
         """Create main content area with image canvas"""
-        # Main frame for canvas and scrollbars (adjusted grid position)
         self.main_frame = ttk.Frame(self.root)
-        self.main_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+        self.main_frame.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
         self.main_frame.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_rowconfigure(0, weight=1)
         
@@ -95,8 +101,12 @@ class OpticalMeasurementApp:
     def create_sidebar(self):
         """Create sidebar with calibration info and measurements list"""
         self.sidebar_frame = ttk.Frame(self.root, width=250)
-        self.sidebar_frame.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)  # Adjusted row
+        self.sidebar_frame.grid(row=1, column=2, sticky="nsew", padx=5, pady=5)
         self.sidebar_frame.grid_propagate(False)
+        
+        # Minimap
+        self.minimap = MinimapWidget(self.sidebar_frame, self)
+        self.minimap.pack(fill=tk.X, padx=5, pady=(5, 2))
         
         # Calibration frame
         self.calibration_frame = ttk.LabelFrame(self.sidebar_frame, text="Calibration")
@@ -122,6 +132,35 @@ class OpticalMeasurementApp:
             text="Calibrate", 
             command=self.start_calibration
         ).pack(pady=5)
+        
+        # Image Adjustments frame
+        self.adjustments_frame = ttk.LabelFrame(self.sidebar_frame, text="Image Adjustments")
+        self.adjustments_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Brightness slider
+        ttk.Label(self.adjustments_frame, text="Brightness").pack(anchor=tk.W, padx=5)
+        self.brightness_var = tk.DoubleVar(value=1.0)
+        self.brightness_scale = ttk.Scale(
+            self.adjustments_frame, from_=0.2, to=3.0,
+            variable=self.brightness_var, orient=tk.HORIZONTAL,
+            command=lambda v: self._on_brightness_change(float(v))
+        )
+        self.brightness_scale.pack(fill=tk.X, padx=5)
+        
+        # Contrast slider
+        ttk.Label(self.adjustments_frame, text="Contrast").pack(anchor=tk.W, padx=5)
+        self.contrast_var = tk.DoubleVar(value=1.0)
+        self.contrast_scale = ttk.Scale(
+            self.adjustments_frame, from_=0.2, to=3.0,
+            variable=self.contrast_var, orient=tk.HORIZONTAL,
+            command=lambda v: self._on_contrast_change(float(v))
+        )
+        self.contrast_scale.pack(fill=tk.X, padx=5)
+        
+        ttk.Button(
+            self.adjustments_frame, text="Reset",
+            command=self._reset_adjustments
+        ).pack(pady=3)
         
         # Measurements frame
         self.measurements_frame = ttk.LabelFrame(self.sidebar_frame, text="Measurements")
@@ -177,7 +216,7 @@ class OpticalMeasurementApp:
     def create_statusbar(self):
         """Create status bar"""
         self.statusbar_frame = ttk.Frame(self.root)
-        self.statusbar_frame.grid(row=1, column=0, columnspan=3, sticky="ew", padx=5, pady=2)  # Adjusted row
+        self.statusbar_frame.grid(row=2, column=0, columnspan=3, sticky="ew", padx=5, pady=2)
         
         # Status labels
         self.status_label = ttk.Label(self.statusbar_frame, text="Ready")
@@ -199,8 +238,10 @@ class OpticalMeasurementApp:
         """Handle application state changes"""
         if change_type == "image_loaded":
             self.update_ui_state()
+            self.minimap.update_minimap(self.canvas.view_state)
         elif change_type == "image_closed":
             self.update_ui_state()
+            self.minimap.delete("all")
         elif change_type == "calibration_changed":
             self.update_calibration_display()
             self.measurement_engine.set_calibration(data)
@@ -220,6 +261,11 @@ class OpticalMeasurementApp:
             max_zoom = self.canvas.image_manager.get_max_zoom() if (hasattr(self.canvas, 'image_manager') and 
                                                                    hasattr(self.canvas.image_manager, 'get_max_zoom')) else 10.0
             self.zoom_label.config(text=f"Zoom: {zoom*100:.0f}% (max: {max_zoom*100:.0f}%)")
+            self.minimap.update_minimap(self.canvas.view_state)
+        elif change_type == "grid_changed":
+            self.canvas._refresh_display()
+        elif change_type == "image_adjustment_changed":
+            self._apply_image_adjustments(data)
     
     def update_ui_state(self):
         """Update UI state based on current application state"""
@@ -368,6 +414,7 @@ class OpticalMeasurementApp:
         
         app_state.set_active_tool(tool_name)
         self.canvas.set_tool(tool_name)
+        self.toolbar.set_active(tool_name)
         
         # ? PHASE 3: Enhanced status messages for all tools
         tool_messages = {
@@ -526,6 +573,26 @@ class OpticalMeasurementApp:
             self.coords_label.config(text=f"Position: ({x}, {y})")
         else:
             self.coords_label.config(text="")
+    
+    # ------------------------------------------------------------------
+    # Image adjustment handlers
+    # ------------------------------------------------------------------
+
+    def _on_brightness_change(self, value: float):
+        app_state.set_brightness(value)
+
+    def _on_contrast_change(self, value: float):
+        app_state.set_contrast(value)
+
+    def _reset_adjustments(self):
+        self.brightness_var.set(1.0)
+        self.contrast_var.set(1.0)
+        app_state.reset_adjustments()
+
+    def _apply_image_adjustments(self, data):
+        """Apply brightness/contrast to image manager and refresh."""
+        self.image_manager.set_adjustments(data["brightness"], data["contrast"])
+        self.canvas._refresh_display()
 
 if __name__ == "__main__":
     root = tk.Tk()

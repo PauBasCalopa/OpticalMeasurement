@@ -25,6 +25,7 @@ _COLORS = {
 
 _TAG = "overlay"          # All overlay items share this tag
 _HIGHLIGHT_TAG = "overlay_highlight"
+_GRID_TAG = "grid_overlay"
 _FONT = ("Arial", 8)
 
 
@@ -80,6 +81,34 @@ class OverlayRenderer:
 
     def get_visibility(self) -> bool:
         return self.visible
+
+    def render_grid(self, view_state: ViewState, spacing: int = 50, color: str = "#cccccc"):
+        """Render a grid overlay in image coordinates."""
+        self.canvas.delete(_GRID_TAG)
+        if view_state.image_width <= 0 or view_state.image_height <= 0:
+            return
+        # Draw vertical lines
+        x = 0
+        while x <= view_state.image_width:
+            sx1, sy1 = self._s(x, 0, view_state)
+            sx2, sy2 = self._s(x, view_state.image_height, view_state)
+            self.canvas.create_line(sx1, sy1, sx2, sy2, fill=color, width=1,
+                                    dash=(2, 4), tags=(_GRID_TAG,))
+            x += spacing
+        # Draw horizontal lines
+        y = 0
+        while y <= view_state.image_height:
+            sx1, sy1 = self._s(0, y, view_state)
+            sx2, sy2 = self._s(view_state.image_width, y, view_state)
+            self.canvas.create_line(sx1, sy1, sx2, sy2, fill=color, width=1,
+                                    dash=(2, 4), tags=(_GRID_TAG,))
+            y += spacing
+        # Grid sits below measurement overlays
+        self.canvas.tag_lower(_GRID_TAG, _TAG)
+
+    def clear_grid(self):
+        """Remove grid overlay."""
+        self.canvas.delete(_GRID_TAG)
 
     def highlight_measurement(self, measurement_id: str):
         """Draw a yellow highlight behind a specific measurement's items."""
@@ -223,7 +252,13 @@ class OverlayRenderer:
             self._line(*sp[i], *sp[ni], c, m)
         cx = sum(p[0] for p in sp) // len(sp)
         cy = sum(p[1] for p in sp) // len(sp)
-        self._text(cx, cy, self._label(m), c, m)
+        label = self._label(m)
+        parts = label.split(" | ")
+        if len(parts) == 2:
+            self._text(cx, cy - 8, parts[0], c, m)
+            self._text(cx, cy + 8, parts[1], c, m)
+        else:
+            self._text(cx, cy, label, c, m)
 
     def _r_coordinate(self, m, vs):
         if len(m.points) < 1:

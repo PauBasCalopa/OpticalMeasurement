@@ -1,234 +1,215 @@
-# Pla d'Acció: Reestructuració Arquitectura OpticalMeasurement
+# Pla d'Acció V2.2: Noves Funcionalitats
 
-## Objectiu
-Reestructurar l'aplicació per tenir un flux de dades unidireccional, un sistema de coordenades robust (sense drift amb pan/zoom), i una separació clara entre lògica i presentació.
-
----
-
-## Fase 0: Preparació
-
-### 0.1 Netejar codi mort
-- Eliminar `bind_events()` a `canvas_widget.py` (duplicat de `EventManager.bind_all_events()`)
-- Eliminar mètodes legacy no usats
-- Eliminar fitxers de docs/ obsolets (reports de cleanup anteriors)
-- Eliminar tests/ que validen l'arquitectura antiga
-
-### 0.2 Establir tests de referència
-- Crear tests manuals documentats: obrir imatge, calibrar, mesurar, pan, zoom
-- Verificar que l'app s'obre i les funcions bàsiques operen (encara que amb bugs)
+## Context
+L'arquitectura de l'aplicació ha estat completament reestructurada (fases 0-5 originals completades).
+L'objectiu ara és afegir noves funcionalitats i millorar la UX.
 
 ---
 
-## Fase 1: ViewState + CoordinateService (Resolució del problema de coordenades)
+## Fase 1: Perímetre del Polígon
 
-**Objectiu:** Eliminar el drift de coordenades canviant el model mental de "moure la imatge al canvas" a "canviar un viewport sobre la imatge".
+**Objectiu:** Afegir el càlcul i visualització del perímetre als polígons (actualment només es calcula l'àrea).
 
-### 1.1 Crear `ViewState` (dataclass)
-```python
-@dataclass
-class ViewState:
-    zoom: float = 1.0
-    pan_offset_x: float = 0.0  # En coordenades d'imatge
-    pan_offset_y: float = 0.0  # En coordenades d'imatge
-    canvas_width: int = 0
-    canvas_height: int = 0
-    image_width: int = 0
-    image_height: int = 0
-```
-- Fitxer: `models/view_state.py`
-- Pan i zoom es representen com a estat pur, no com a posició d'un canvas item
+### 1.1 Funció de càlcul del perímetre
+- **Fitxer:** `utils/math_utils.py`
+- Crear `calculate_polygon_perimeter(points)` — suma de distàncies euclidanes entre vèrtexs consecutius (incloent el segment de tancament del primer a l'últim punt)
+- Reutilitzar `calculate_distance()` existent per cada segment
 
-### 1.2 Crear `CoordinateService` (funcions pures)
-```python
-class CoordinateService:
-    @staticmethod
-    def screen_to_image(screen_x, screen_y, view_state) -> (float, float)
-    
-    @staticmethod
-    def image_to_screen(image_x, image_y, view_state) -> (int, int)
-    
-    @staticmethod
-    def get_visible_image_rect(view_state) -> (x, y, w, h)
-    
-    @staticmethod
-    def clamp_pan(view_state) -> ViewState  # Límits de pan
-    
-    @staticmethod
-    def zoom_at_point(view_state, screen_x, screen_y, new_zoom) -> ViewState
-    
-    @staticmethod
-    def fit_to_window(view_state) -> ViewState
-```
-- Fitxer: `services/coordinate_service.py`
-- **Zero estat intern** — rep ViewState, retorna resultats o nou ViewState
-- **Testable unitàriament** sense cap dependència de tkinter
+### 1.2 Actualitzar model de dades
+- **Fitxer:** `models/measurement_data.py`
+- Afegir camp `perimeter: float = 0.0` a `PolygonAreaMeasurement`
+- El model emmagatzema àrea i perímetre conjuntament
 
-### 1.3 Integrar amb `AppState`
-- Afegir `view_state: ViewState` a `ApplicationState`
-- Pan = `app_state.update_view_state(new_view_state)` → notifica observers
-- Zoom = `app_state.update_view_state(new_view_state)` → notifica observers
+### 1.3 Calcular perímetre al motor de mesures
+- **Fitxer:** `core/measurement_engine.py`
+- Dins `calculate_polygon_area_measurement()`:
+  - Cridar `calculate_polygon_perimeter(points)`
+  - Aplicar calibratge: `perimeter_real = perimeter_px × scale_factor` (lineal, no quadràtic com l'àrea)
+  - Assignar al camp `perimeter` del resultat
+- Actualitzar `format_measurement_result()` per incloure "Perimeter: X.XX units"
 
-### 1.4 Adaptar `ImageCanvas` al nou model
-- Eliminar `_apply_smart_pan_boundaries()`, `_stabilize_coordinate_system()`, `_update_actual_zoom_level()`
-- Eliminar `_force_coordinate_system_refresh()`
-- El canvas NO mou items — repinta basant-se en ViewState
-- `update_display()` és l'únic mètode que pinta:
-  1. Calcula posició imatge a partir de ViewState
-  2. Posiciona el canvas item amb `coords()`
-  3. Repinta overlays
+### 1.4 Mostrar perímetre a l'overlay del canvas
+- **Fitxer:** `gui/canvas/overlay_renderer.py`
+- Dins `_r_polygon()`: mostrar dues línies de text al centroide:
+  - Línia 1: `"Area: X.XX units²"`
+  - Línia 2: `"Perim: Y.YY units"`
 
-### 1.5 Adaptar `EventManager`
-- Pan drag: calcula delta en coordenades d'imatge, actualitza ViewState
-- Eliminar tota la lògica de validació post-pan (ja no cal)
-- Eliminar `_stabilize_coordinate_system()` calls
+### 1.5 Incloure perímetre a l'exportació
+- **Fitxer:** `services/export_service.py`
+- Dins `_draw_polygon_area()`: afegir text del perímetre sota el de l'àrea
 
-### 1.6 Eliminar `CoordinateManager` (antiga)
-- Tota la seva funcionalitat la cobreix `CoordinateService`
-- `gui/canvas/coordinate_manager.py` → eliminat
+### 1.6 Verificació
+- Crear polígon amb 3+ punts → ha de mostrar àrea + perímetre
+- Exportar imatge → el text ha d'incloure ambdós valors
+- Amb i sense calibratge
 
 ---
 
-## Fase 2: Simplificar ImageCanvas (desacoblar el God Object) ✅ COMPLETADA
+## Fase 2: Toolbar Visual
 
-### 2.1 Extreure lògica de zoom a `CoordinateService` ✅
-- Fet a Fase 1 — zoom ja calcula ViewState via CoordinateService
+**Objectiu:** Barra de botons amb icones per accedir ràpidament a les eines, substituint la navegació exclusiva per menú/teclat.
 
-### 2.2 Extreure `complete_measurement()` a `MeasurementEngine` ✅
-- `MeasurementEngine.complete(tool_type, points)` creat
-- `ImageCanvas.complete_measurement()` reduït a 3 línies significatives
+### 2.1 Crear mòdul de toolbar
+- **Fitxer nou:** `gui/toolbar.py`
+- Classe `ToolBar(ttk.Frame)` amb botons per cada eina:
+  - Pan, Distance, Radius, Angle, Two-Line Angle, Polygon Area, Point Coordinates, Point-to-Line, Arc Length
+  - Botó de Calibratge separat
+- Icones generades amb tkinter Canvas (formes geomètriques simples — línia, cercle, angle, polígon)
+- Sense dependències externes d'imatges
 
-### 2.3 Extreure export a `ExportService` ✅
-- `services/export_service.py` creat amb tota la lògica de renderitzat
-- `main_window.py` crida directament `ExportService.export()`
-- ~350 línies eliminades de `canvas_widget.py`
+### 2.2 Integrar toolbar al layout
+- **Fitxer:** `gui/main_window.py`
+- Inserir `ToolBar` entre la barra de menú i el canvas
+- Connectar cada botó a `set_tool()` del canvas
 
-### 2.4 Netejar `ImageCanvas` ✅
-- De ~750 línies a ~367 línies
-- Imports no usats eliminats (math, Image, ImageDraw, ImageFont)
+### 2.3 Feedback visual de l'eina activa
+- **Fitxer:** `gui/toolbar.py`
+- Ressaltar el botó actiu amb fons diferent (relief=SUNKEN o color)
+- Actualitzar quan canvia l'eina (des de menú, teclat o toolbar)
 
----
+### 2.4 Sincronització toolbar ↔ menú ↔ teclat
+- **Fitxer:** `gui/menus.py`
+- Totes les fonts de selecció d'eina passen pel mateix callback
+- L'estat visual del toolbar es manté consistent
 
-## Fase 3: Flux unidireccional d'events ✅ COMPLETADA
-
-### 3.1 Refactoritzar `EventManager` ✅
-- `handle_left_click` delega a calibration_handler o tool_handler — sense switch de tool types
-- `handle_left_drag/release` deleguen a tool_handler (PanTool gestiona pan)
-- Right-click pan unificat; `pan_start` eliminat d'EventManager
-- EventManager: de ~120 a 109 línies, molt més simple
-
-### 3.2 Simplificar ToolHandler + Tools ✅
-- Nou `ToolResult` (NONE, ADD_POINT, COMPLETE) definit a `base_tool.py`
-- `BaseTool.handle_click(image_x, image_y, point_count) → ToolResult` — rep coords d'imatge
-- Tools ja no dibuixen al canvas ni gestionen temp_points
-- ToolHandler processa ToolResult: afegeix punt, dibuixa marker temp, completa mesura
-- Eliminat codi fallback `_check_measurement_completion`
-
-### 3.3 Unificar gestió de punts temporals ✅
-- `temp_points` ara viu a `ToolHandler`, no a `ImageCanvas`
-- `temp_overlays` list eliminat — ús de tags "temp" directament
-- `ImageCanvas.complete_measurement()` eliminat — ToolHandler._complete_measurement() és l'únic path
-- `ImageCanvas`: de 367 a 308 línies
+### 2.5 Verificació
+- Canviar eina per toolbar → el botó es ressalta, l'eina canvia
+- Canviar eina per teclat/menú → el botó del toolbar s'actualitza
+- Tooltip (hover) mostra nom de l'eina + drecera
 
 ---
 
-## Fase 4: OverlayRenderer ✅ COMPLETADA
+## Fase 3: Grid/Graella Superposada
 
-### 4.1 Refactoritzar `OverlayManager` → `OverlayRenderer` ✅
-- `OverlayRenderer` sense dict d'item IDs — usa tags tkinter (`overlay`, `m_{id}`)
-- `render_all()` esborra i repinta; `draw_measurement_overlay()` incremental
-- `remove_measurement_overlay(id)` → `canvas.delete(f"m_{id}")`
-- Visibilitat via `toggle_visibility()` que esborra/repinta tot
-- Arreglat bug `point_to_line`: ara usa `find_closest_point_on_line` per la perpendicular real
+**Objectiu:** Quadrícula configurable sobre la imatge per ajudar a alinear mesures i tenir referència visual.
 
-### 4.2 Separar lògica de dibuix de lògica de geometria del overlay ✅
-- Cada `_r_{type}` rep `(measurement, view_state)` i converteix image→screen amb `CoordinateService`
-- Helper `_s(ix, iy, vs)` centralitza la conversió
-- Helpers `_line`, `_text`, `_oval` apliquen tags automàticament
+### 3.1 Opcions de menú
+- **Fitxer:** `gui/menus.py`
+- Afegir al menú View:
+  - "Show Grid" (toggle, drecera: G)
+  - "Grid Settings..." (obre diàleg de configuració)
 
----
+### 3.2 Renderitzar graella
+- **Fitxer:** `gui/canvas/overlay_renderer.py`
+- Nou mètode `render_grid(view_state, spacing, color, opacity)`
+- Dibuixar línies verticals i horitzontals en coordenades d'imatge
+- Respectar zoom/pan (convertir image→screen)
+- Usar tag `"grid"` per gestionar visibilitat
+- Renderitzar SOTA els overlays de mesures
 
-## Fase 5: Polish i Features pendents ✅ COMPLETADA
+### 3.3 Diàleg de configuració
+- **Fitxer:** `gui/dialogs.py`
+- `GridSettingsDialog`:
+  - Espaiat (en píxels o unitats calibrades)
+  - Color de la graella (selecció de presets)
+  - Opacitat (slider)
+  - Subdivisions (opcional)
 
-### 5.1 Undo/Redo ✅
-- Command stack a `AppState` (`_UndoEntry` amb kind add/remove/clear)
-- `undo()` / `redo()` reverteixen/reapliquen accions de mesura
-- Ctrl+Z / Ctrl+Y connectats via menú Edit (enable/disable dinàmic)
-- 8 tests unitaris a `tests/test_undo_redo.py`
+### 3.4 Estat de la graella
+- **Fitxer:** `core/app_state.py`
+- Afegir `grid_visible: bool`, `grid_spacing: int`, `grid_color: str`
 
-### 5.2 Millorar UX del Sidebar ✅
-- Selecció al sidebar → highlight groc (halo) de l'overlay al canvas
-- Click sobre overlay (en mode pan) → selecció automàtica al sidebar
-- `OverlayRenderer.highlight_measurement()` / `clear_highlight()`
-- `OverlayRenderer.find_measurement_at()` per hit-test per tags
-
-### 5.3 Millorar feedback visual de les tools ✅
-- Línia de preview (dash) del darrer punt posat fins al cursor
-- `ToolHandler.handle_motion()` dibuixa preview amb tag `"preview"`
-- Es neteja automàticament en cancel·lar o completar la mesura
-
----
-
-## Estructura de fitxers resultant
-
-```
-core/
-    app_state.py          # Estat centralitzat (refactored)
-    image_manager.py      # Càrrega i cache d'imatges (simplificat)
-
-models/
-    calibration_data.py   # (sense canvis)
-    image_data.py         # (sense canvis)
-    measurement_data.py   # (sense canvis)
-    view_state.py         # NOU: ViewState dataclass
-
-services/
-    coordinate_service.py # NOU: Conversions screen↔image (funcions pures)
-    measurement_service.py# RENOMBRAT de measurement_engine.py
-    export_service.py     # NOU: Exportació d'imatge amb overlays
-
-gui/
-    main_window.py        # Finestra principal (simplificat)
-    dialogs.py            # (sense canvis)
-    menus.py              # (sense canvis)
-    canvas/
-        image_viewport.py # RENOMBRAT de canvas_widget.py (reduït a ~150 línies)
-        event_handler.py  # RENOMBRAT de event_manager.py (simplificat)
-        tool_handler.py   # (simplificat)
-        overlay_renderer.py # RENOMBRAT de overlay_manager.py
-        calibration_handler.py # (simplificat)
-        tools/
-            base_tool.py       # (simplificat)
-            measurement_tool.py
-            pan_tool.py
-            polygon_tool.py
-
-utils/
-    math_utils.py         # (sense canvis)
-
-# ELIMINATS:
-#   gui/canvas/coordinate_manager.py  → reemplaçat per services/coordinate_service.py
-```
+### 3.5 Verificació
+- G per mostrar/amagar graella
+- Zoom/pan → la graella segueix la imatge correctament
+- Canviar espaiat → s'actualitza immediatament
 
 ---
 
-## Ordre d'Implementació i Dependències
+## Fase 4: Ajust de Contrast i Brillantor
+
+**Objectiu:** Permetre modificar la visualització de la imatge per veure millor detalls, sense alterar la imatge original.
+
+### 4.1 Sliders al sidebar
+- **Fitxer:** `gui/main_window.py`
+- Afegir secció "Image Adjustments" al sidebar:
+  - Slider Brightness (0.0 - 2.0, default 1.0)
+  - Slider Contrast (0.0 - 2.0, default 1.0)
+  - Botó "Reset" per tornar a 1.0/1.0
+
+### 4.2 Processament d'imatge
+- **Fitxer:** `core/image_manager.py`
+- Usar `PIL.ImageEnhance.Brightness` i `PIL.ImageEnhance.Contrast`
+- Mantenir la imatge original intacta
+- Cache de la imatge ajustada per evitar recalcular a cada repintat
+- Invalidar cache quan canvien els sliders
+
+### 4.3 Integrar amb el canvas
+- **Fitxer:** `gui/canvas_widget.py`
+- `update_display()` usa la imatge ajustada (no l'original) per renderitzar
+- L'exportació utilitza la imatge ORIGINAL (sense ajustos)
+
+### 4.4 Verificació
+- Moure sliders → la imatge canvia en temps real
+- Exportar → la imatge exportada NO té els ajustos
+- Reset → torna a la visualització original
+- Carregar nova imatge → sliders tornen a 1.0
+
+---
+
+## Fase 5: Minimap (Navegador)
+
+**Objectiu:** Mini preview de la imatge sencera amb rectangle de viewport per orientar-se quan es fa zoom.
+
+### 5.1 Widget minimap
+- **Fitxer nou:** `gui/minimap_widget.py`
+- Classe `MinimapWidget(tk.Canvas)` (~200×150px)
+- Mostra thumbnail de la imatge sencera
+- Dibuixa rectangle vermell indicant la zona visible actual
+
+### 5.2 Integrar al sidebar
+- **Fitxer:** `gui/main_window.py`
+- Col·locar el minimap a dalt del sidebar (sobre la secció de calibratge)
+- Actualitzar-se automàticament quan canvia el ViewState (zoom/pan)
+
+### 5.3 Navegació interactiva
+- **Fitxer:** `gui/minimap_widget.py`
+- Clic al minimap → el viewport es centra a aquella posició
+- Drag al minimap → pan en temps real
+- Calcular la correspondència minimap_coords → image_coords → ViewState
+
+### 5.4 Rendiment
+- Generar thumbnail un cop (quan es carrega imatge)
+- Només redibuixar el rectangle de viewport a cada moviment
+- Amagar minimap si la imatge sencera és visible (zoom ≤ fit)
+
+### 5.5 Verificació
+- Zoom in → apareix rectangle al minimap
+- Pan → el rectangle es mou
+- Clic al minimap → el canvas navega allà
+- Canviar imatge → minimap s'actualitza
+
+---
+
+## Ordre d'Implementació
 
 ```
-Fase 0 ──→ Fase 1 ──→ Fase 2 ──→ Fase 3 ──→ Fase 4 ──→ Fase 5
-(neteja)   (coords)   (canvas)   (events)   (overlays)  (features)
-                │
-                └── Aquesta fase sola ja resol el problema de pan/zoom
+Fase 1 ──→ Fase 2 ──→ Fase 3 ──→ Fase 4 ──→ Fase 5
+(perim.)   (toolbar)   (grid)    (contrast)  (minimap)
+  ↑
+  └── Més ràpida i útil, sense canvis de UI majors
 ```
 
-**Cada fase deixa l'app funcional.** No es trenca res entre fases.
+**Cada fase deixa l'app funcional.** Es pot desplegar després de cada fase.
 
 ---
 
-## Riscos i Decisions
+## Fitxers afectats per fase
 
-| Decisió | Opció A | Opció B | Recomanació |
-|---------|---------|---------|-------------|
-| Framework GUI | Mantenir tkinter | Migrar a Qt/PySide | **Mantenir tkinter** — el problema no és el framework, és l'arquitectura |
-| Rendering | Moure canvas item | Repintar cada frame | **Moure canvas item** però posició calculada des de ViewState (tkinter no és un game engine, repintar tot és innecessari) |
-| Undo/Redo | Command pattern | State snapshots | A decidir a Fase 5 |
-| Tests | Unit tests amb pytest | + Integration tests amb tkinter | Unit tests per services, manual per GUI |
+| Fitxer | F1 | F2 | F3 | F4 | F5 |
+|--------|:--:|:--:|:--:|:--:|:--:|
+| `utils/math_utils.py` | ✏️ | | | | |
+| `models/measurement_data.py` | ✏️ | | | | |
+| `core/measurement_engine.py` | ✏️ | | | | |
+| `core/app_state.py` | | | ✏️ | | |
+| `core/image_manager.py` | | | | ✏️ | |
+| `gui/canvas/overlay_renderer.py` | ✏️ | | ✏️ | | |
+| `gui/canvas_widget.py` | | | | ✏️ | |
+| `gui/main_window.py` | | ✏️ | | ✏️ | ✏️ |
+| `gui/menus.py` | | ✏️ | ✏️ | | |
+| `gui/dialogs.py` | | | ✏️ | | |
+| `gui/toolbar.py` | | 🆕 | | | |
+| `gui/minimap_widget.py` | | | | | 🆕 |
+| `services/export_service.py` | ✏️ | | | | |
+
+✏️ = Modificat | 🆕 = Nou

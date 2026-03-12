@@ -27,6 +27,9 @@ class ImageManager:
         self.current_image_data: Optional[ImageData] = None
         self._display_cache = {}  # Cache for display images at different zoom levels
         self.max_zoom_level = 10.0  # ? NEW: Dynamic max zoom based on image size
+        self._brightness = 1.0
+        self._contrast = 1.0
+        self._adjusted_image: Optional[Image.Image] = None  # Cached adjusted image
     
     def load_image(self, file_path: str) -> ImageData:
         """Load image from file path with error handling"""
@@ -92,7 +95,7 @@ class ImageManager:
         
         # Create new display image
         display_image = self._create_display_image(
-            self.current_image_data.original_image, zoom_level
+            self._get_source_image(), zoom_level
         )
         
         # Cache it (limit cache size)
@@ -134,6 +137,30 @@ class ImageManager:
     def get_max_zoom(self) -> float:
         """Get maximum zoom level for current image"""
         return self.max_zoom_level
+    
+    def set_adjustments(self, brightness: float, contrast: float):
+        """Set brightness/contrast adjustments and invalidate cache."""
+        if self._brightness == brightness and self._contrast == contrast:
+            return
+        self._brightness = brightness
+        self._contrast = contrast
+        self._adjusted_image = None
+        self._display_cache.clear()
+    
+    def _get_source_image(self) -> Optional[Image.Image]:
+        """Get the source image with brightness/contrast adjustments applied."""
+        if not self.current_image_data or not self.current_image_data.original_image:
+            return None
+        if self._brightness == 1.0 and self._contrast == 1.0:
+            return self.current_image_data.original_image
+        if self._adjusted_image is not None:
+            return self._adjusted_image
+        from PIL import ImageEnhance
+        img = self.current_image_data.original_image
+        img = ImageEnhance.Brightness(img).enhance(self._brightness)
+        img = ImageEnhance.Contrast(img).enhance(self._contrast)
+        self._adjusted_image = img
+        return img
     
     def _create_display_image(self, original_image: Image.Image, zoom_level: float) -> Image.Image:
         """Create optimized display image"""

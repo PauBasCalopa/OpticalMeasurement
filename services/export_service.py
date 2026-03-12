@@ -135,7 +135,13 @@ class ExportService:
             draw.line([coords[i], coords[(i + 1) % len(coords)]], fill="cyan", width=lw)
         cx = sum(p[0] for p in coords) / len(coords)
         cy = sum(p[1] for p in coords) / len(coords)
-        self._draw_label(draw, cx, cy, m, font, "cyan")
+        label = self.measurement_engine.format_measurement_result(m)
+        parts = label.split(" | ")
+        if len(parts) == 2:
+            self._draw_text_with_bg(draw, cx, cy - 12, parts[0], font, "cyan", "cyan")
+            self._draw_text_with_bg(draw, cx, cy + 12, parts[1], font, "cyan", "cyan")
+        else:
+            self._draw_label(draw, cx, cy, m, font, "cyan")
 
     def _draw_coordinate(self, draw, m, lw, font):
         for i, point in enumerate(m.points):

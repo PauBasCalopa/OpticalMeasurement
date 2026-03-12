@@ -36,6 +36,12 @@ class CalibrationHandler:
     def handle_click(self, event):
         """Handle calibration click with improved overlay positioning"""
         image_coords = self.canvas.screen_to_image_coords(event.x, event.y)
+        # Clamp to image bounds so clicks near edges don't produce out-of-range coords
+        vs = self.canvas.view_state
+        image_coords = (
+            max(0, min(image_coords[0], vs.image_width - 1)),
+            max(0, min(image_coords[1], vs.image_height - 1)),
+        )
         self.calibration_points.append(image_coords)
         
         # Store the actual click location for consistent overlay drawing
