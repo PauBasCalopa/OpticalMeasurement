@@ -148,17 +148,8 @@ OpticalMeasurement/
 ├── services/
 │   ├── coordinate_service.py  # Image <-> screen coordinate conversions
 │   └── export_service.py      # Image export with overlays
-├── utils/
-│   └── math_utils.py          # Geometric calculations
-└── tests/
-    ├── test_coordinate_service.py
-    └── test_undo_redo.py
-```
-
-## Testing
-
-```bash
-pytest tests/
+└── utils/
+    └── math_utils.py          # Geometric calculations
 ```
 
 ## Technical Details
