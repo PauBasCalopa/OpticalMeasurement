@@ -170,7 +170,7 @@ pytest tests/
 
 ## License
 
-This project is open source. See LICENSE file for details.
+MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 

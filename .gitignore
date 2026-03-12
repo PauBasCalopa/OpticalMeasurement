@@ -2,6 +2,16 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.venv/
+.env
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# Internal docs
+docs/ACTION_PLAN.md
 
 # PyInstaller
 build/

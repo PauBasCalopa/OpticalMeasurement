@@ -135,7 +135,6 @@ class MenuManager:
         
         self.view_menu.add_separator()
         
-        # TODO: Implement show/hide overlays
         self.view_menu.add_command(
             label="Hide Overlays",
             command=self.toggle_overlays,
@@ -224,8 +223,6 @@ class MenuManager:
             command=lambda: self.app.select_tool("arc_length"),
             accelerator="F12"
         )
-        
-        # TODO: Add more measurement tools
         
         self.tools_menu.add_separator()
         
