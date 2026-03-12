@@ -193,7 +193,8 @@ class AboutDialog:
         # Description - using simple text without bullet points to avoid encoding issues
         description = """A desktop application for precise measurements on digital images.
 
-                        By: Pau Bas Calopa (C) 2026."""
+By: Pau Bas Calopa (C) 2026.
+Licensed under the MIT License."""
         
         description_label = ttk.Label(
             main_frame, 
