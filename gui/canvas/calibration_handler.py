@@ -21,8 +21,7 @@ class CalibrationHandler:
         self.canvas.is_calibrating = True
         self.calibration_points.clear()
         self.calibration_screen_points.clear()
-        self.canvas.temp_points.clear()
-        self.canvas.clear_temp_overlays()
+        self.canvas.tool_handler.cancel()
         
         # Clear any existing calibration overlays
         self.canvas.delete("calibration")
@@ -36,8 +35,7 @@ class CalibrationHandler:
     
     def handle_click(self, event):
         """Handle calibration click with improved overlay positioning"""
-        # Convert to image coordinates using CoordinateManager
-        image_coords = self.canvas.coordinate_manager.screen_to_image(event.x, event.y)
+        image_coords = self.canvas.screen_to_image_coords(event.x, event.y)
         self.calibration_points.append(image_coords)
         
         # Store the actual click location for consistent overlay drawing
@@ -64,8 +62,8 @@ class CalibrationHandler:
         
         # Use image coordinates converted to current screen position for line drawing
         # This ensures the line stays properly positioned even after pan/zoom operations
-        screen_pt1 = self.canvas.coordinate_manager.image_to_screen(*self.calibration_points[0])
-        screen_pt2 = self.canvas.coordinate_manager.image_to_screen(*self.calibration_points[1])
+        screen_pt1 = self.canvas.image_to_screen_coords(*self.calibration_points[0])
+        screen_pt2 = self.canvas.image_to_screen_coords(*self.calibration_points[1])
         
         line_id = self.canvas.create_line(
             screen_pt1[0], screen_pt1[1],
@@ -93,8 +91,9 @@ class CalibrationHandler:
             text_y = 30
         else:
             # Position text relative to actual image boundaries
-            image_bounds = self.canvas.coordinate_manager.get_image_boundaries_in_screen_coords()
-            image_left, image_top, image_right, image_bottom = image_bounds
+            from services.coordinate_service import CoordinateService
+            left, top, right, bottom = CoordinateService.get_image_bounds_on_screen(self.canvas.view_state)
+            image_left, image_top, image_right, image_bottom = int(left), int(top), int(right), int(bottom)
             
             # Center text horizontally within the image bounds
             text_x = (image_left + image_right) // 2
@@ -156,7 +155,7 @@ class CalibrationHandler:
         
         # Redraw calibration points
         for i, point in enumerate(self.calibration_points):
-            screen_coords = self.canvas.coordinate_manager.image_to_screen(*point)
+            screen_coords = self.canvas.image_to_screen_coords(*point)
             
             self.canvas.create_oval(
                 screen_coords[0] - 5, screen_coords[1] - 5,
@@ -171,8 +170,8 @@ class CalibrationHandler:
             self._create_instruction_text("CALIBRATION: Click second point")
         elif len(self.calibration_points) == 2:
             # Draw calibration line between points
-            screen1 = self.canvas.coordinate_manager.image_to_screen(*self.calibration_points[0])
-            screen2 = self.canvas.coordinate_manager.image_to_screen(*self.calibration_points[1])
+            screen1 = self.canvas.image_to_screen_coords(*self.calibration_points[0])
+            screen2 = self.canvas.image_to_screen_coords(*self.calibration_points[1])
             
             self.canvas.create_line(
                 screen1[0], screen1[1], screen2[0], screen2[1],

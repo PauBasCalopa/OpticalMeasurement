@@ -69,19 +69,16 @@ class MenuManager:
         self.edit_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label="Edit", menu=self.edit_menu)
         
-        # TODO: Implement undo/redo
         self.edit_menu.add_command(
             label="Undo",
-            command=self.not_implemented,
-            accelerator="Ctrl+Z",
-            state=tk.DISABLED
+            command=self.app.undo,
+            accelerator="Ctrl+Z"
         )
         
         self.edit_menu.add_command(
             label="Redo",
-            command=self.not_implemented,
-            accelerator="Ctrl+Y",
-            state=tk.DISABLED
+            command=self.app.redo,
+            accelerator="Ctrl+Y"
         )
         
         self.edit_menu.add_separator()
@@ -253,6 +250,8 @@ class MenuManager:
         self.root.bind('<Control-e>', lambda e: self.app.export_image())
         
         # Edit menu shortcuts
+        self.root.bind('<Control-z>', lambda e: self.app.undo())
+        self.root.bind('<Control-y>', lambda e: self.app.redo())
         self.root.bind('<Control-Shift-C>', lambda e: self.app.clear_all_measurements())
         self.root.bind('<Delete>', lambda e: self.app.delete_selected_measurement())
         
@@ -382,6 +381,8 @@ General:
         self.file_menu.entryconfig("Export Image...", state=tk.NORMAL if (image_loaded and has_measurements) else tk.DISABLED)
         
         # Update Edit menu
+        self.edit_menu.entryconfig("Undo", state=tk.NORMAL if app_state.can_undo else tk.DISABLED)
+        self.edit_menu.entryconfig("Redo", state=tk.NORMAL if app_state.can_redo else tk.DISABLED)
         self.edit_menu.entryconfig("Clear All Measurements", state=tk.NORMAL if has_measurements else tk.DISABLED)
         self.edit_menu.entryconfig("Delete Selected", state=tk.NORMAL if has_measurements else tk.DISABLED)
         

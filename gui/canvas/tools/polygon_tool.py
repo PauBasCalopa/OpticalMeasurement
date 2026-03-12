@@ -5,53 +5,33 @@ Handles polygon area measurements. This tool allows multiple points and is compl
 by right-clicking rather than reaching a specific point count.
 """
 
-from gui.canvas.tools.base_tool import BaseTool
+from gui.canvas.tools.base_tool import BaseTool, ToolResult
 
 class PolygonTool(BaseTool):
     """Tool for polygon area measurements"""
     
     def __init__(self, canvas):
         super().__init__(canvas, "polygon_area")
-        self.points_needed = 3  # Minimum for a polygon
         self.color = "cyan"
     
     def get_points_needed(self) -> int:
-        """Get minimum number of points needed for a polygon"""
-        return self.points_needed
+        return 3  # Minimum for a polygon
     
-    def handle_click(self, event) -> bool:
-        """Handle polygon tool click - add point to polygon"""
-        # Add point to polygon
-        image_coords = self.add_image_point(event)
-        
-        # Draw temporary point in cyan
-        self.draw_temp_point(event, self.color)
-        
-        # Polygon doesn't auto-complete - user right-clicks to finish
-        # But we can provide visual feedback about minimum points
-        if len(self.canvas.temp_points) >= self.points_needed:
-            # Could add visual indicator that polygon can now be completed
-            pass
-        
-        return True
+    def handle_click(self, image_x: float, image_y: float, point_count: int) -> str:
+        """Always add point — polygon completes on right-click."""
+        return ToolResult.ADD_POINT
     
-    def can_complete(self) -> bool:
-        """Check if polygon has enough points to be completed"""
-        return len(self.canvas.temp_points) >= self.points_needed
-    
-    def handle_right_click(self, event) -> bool:
-        """Handle right-click to complete polygon (if enough points)"""
-        if self.can_complete():
-            self.complete_measurement()
-            return True
-        return False
+    def handle_right_click(self, point_count: int) -> str:
+        """Complete polygon if enough points, otherwise do nothing."""
+        if point_count >= 3:
+            return ToolResult.COMPLETE
+        return ToolResult.NONE
     
     def get_tool_info(self):
-        """Get information about this tool"""
         return {
             "type": "polygon",
             "measurement_type": "polygon_area",
-            "min_points": self.points_needed,
+            "min_points": 3,
             "color": self.color,
             "completion_method": "right_click"
         }

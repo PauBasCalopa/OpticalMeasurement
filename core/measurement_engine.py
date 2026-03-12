@@ -235,3 +235,29 @@ class MeasurementEngine:
                 return f"{measurement.result:.{decimal_places}f} {'units' if self.calibration and self.calibration.is_calibrated else 'px'}"
         
         return str(measurement.result)
+    
+    def complete(self, tool_type: str, points: List[Tuple[float, float]]) -> Optional[MeasurementBase]:
+        """Unified measurement completion — dispatches to the appropriate calculator.
+        
+        Returns the completed measurement, or None if insufficient points.
+        Raises ValueError on calculation errors (e.g. collinear points for radius).
+        """
+        if tool_type == "distance" and len(points) >= 2:
+            return self.calculate_distance_measurement(points[0], points[1])
+        elif tool_type == "radius" and len(points) >= 3:
+            return self.calculate_radius_measurement(points[0], points[1], points[2])
+        elif tool_type == "angle" and len(points) >= 3:
+            return self.calculate_angle_measurement(points[0], points[1], points[2])
+        elif tool_type == "two_line_angle" and len(points) >= 4:
+            return self.calculate_two_line_angle_measurement(
+                points[0], points[1], points[2], points[3])
+        elif tool_type == "polygon_area" and len(points) >= 3:
+            return self.calculate_polygon_area_measurement(list(points))
+        elif tool_type == "coordinate" and len(points) >= 1:
+            coord_type = "single" if len(points) == 1 else "difference"
+            return self.calculate_coordinate_measurement(list(points), coord_type)
+        elif tool_type == "point_to_line" and len(points) >= 3:
+            return self.calculate_point_to_line_measurement(points[0], points[1], points[2])
+        elif tool_type == "arc_length" and len(points) >= 3:
+            return self.calculate_arc_length_measurement(points[0], points[1], points[2])
+        return None

@@ -15,6 +15,7 @@ from models.calibration_data import CalibrationData
 from gui.canvas_widget import ImageCanvas
 from gui.dialogs import CalibrationDialog, MeasurementPropertiesDialog
 from gui.menus import MenuManager
+from services.export_service import ExportService
 
 class OpticalMeasurementApp:
     """Main application window and controller"""
@@ -25,6 +26,7 @@ class OpticalMeasurementApp:
         # Initialize core components
         self.image_manager = ImageManager()
         self.measurement_engine = MeasurementEngine()
+        self.export_service = ExportService(self.measurement_engine)
         
         # Set up window
         self.setup_window()
@@ -135,6 +137,9 @@ class OpticalMeasurementApp:
         # Add double-click to edit properties functionality
         self.measurements_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_measurement())
         
+        # Selection → highlight overlay on canvas
+        self.measurements_listbox.bind("<<ListboxSelect>>", self._on_measurement_selected)
+        
         # Add right-click context menu
         self.measurements_listbox.bind("<Button-3>", self.show_measurement_context_menu)
         
@@ -206,12 +211,15 @@ class OpticalMeasurementApp:
             self.update_ui_state()  # Update UI state when calibration cleared
         elif change_type in ["measurement_added", "measurement_removed", "measurements_cleared"]:
             self.update_measurements_list()
-            self.update_ui_state()  # ? FIX: Update UI state when measurements change
-        elif change_type == "zoom_changed":
-            # ? ENHANCED: Show zoom with max zoom info
+            self.canvas.redraw_all_overlays()
+            self.update_ui_state()
+        elif change_type == "undo_redo_changed":
+            self.update_ui_state()
+        elif change_type in ["zoom_changed", "view_changed"]:
+            zoom = data.zoom if hasattr(data, 'zoom') else data
             max_zoom = self.canvas.image_manager.get_max_zoom() if (hasattr(self.canvas, 'image_manager') and 
                                                                    hasattr(self.canvas.image_manager, 'get_max_zoom')) else 10.0
-            self.zoom_label.config(text=f"Zoom: {data*100:.0f}% (max: {max_zoom*100:.0f}%)")
+            self.zoom_label.config(text=f"Zoom: {zoom*100:.0f}% (max: {max_zoom*100:.0f}%)")
     
     def update_ui_state(self):
         """Update UI state based on current application state"""
@@ -253,6 +261,19 @@ class OpticalMeasurementApp:
             result_text = self.measurement_engine.format_measurement_result(measurement)
             display_text = f"{measurement.label}: {result_text}"
             self.measurements_listbox.insert(tk.END, display_text)
+    
+    def _on_measurement_selected(self, event):
+        """Highlight the selected measurement's overlay on the canvas."""
+        selection = self.measurements_listbox.curselection()
+        if not selection:
+            self.canvas.overlay_renderer.clear_highlight()
+            return
+        index = selection[0]
+        if 0 <= index < len(app_state.measurements):
+            m = app_state.measurements[index]
+            self.canvas.overlay_renderer.highlight_measurement(m.id)
+        else:
+            self.canvas.overlay_renderer.clear_highlight()
     
     # Menu command methods
     def open_image(self):
@@ -308,7 +329,12 @@ class OpticalMeasurementApp:
         
         if filename:
             try:
-                self.canvas.export_image(filename)
+                self.export_service.export(
+                    self.canvas.current_image.original_image,
+                    app_state.measurements,
+                    filename,
+                    overlays_visible=self.canvas.get_overlays_visibility()
+                )
                 self.status_label.config(text=f"Exported: {os.path.basename(filename)}")
                 messagebox.showinfo("Success", f"Image exported to:\n{filename}")
             except Exception as e:
@@ -396,6 +422,18 @@ class OpticalMeasurementApp:
             # Clear from app state
             app_state.clear_measurements()
             self.status_label.config(text="All measurements cleared")
+    
+    def undo(self):
+        """Undo last measurement action."""
+        if app_state.can_undo:
+            app_state.undo()
+            self.status_label.config(text="Undo")
+
+    def redo(self):
+        """Redo last undone action."""
+        if app_state.can_redo:
+            app_state.redo()
+            self.status_label.config(text="Redo")
     
     def edit_selected_measurement(self):
         """Edit selected measurement properties"""
