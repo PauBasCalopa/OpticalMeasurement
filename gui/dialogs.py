@@ -187,7 +187,7 @@ class AboutDialog:
         title_label.pack(pady=(0, 10))
         
         # Version
-        version_label = ttk.Label(main_frame, text="Version 2.3")
+        version_label = ttk.Label(main_frame, text="Version 2.4")
         version_label.pack(pady=(0, 15))
         
         # Description - using simple text without bullet points to avoid encoding issues

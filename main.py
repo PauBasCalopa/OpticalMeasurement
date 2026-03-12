@@ -7,9 +7,20 @@ a pixel-to-real-world calibration system.
 """
 
 import sys
+import os
 import tkinter as tk
 from tkinter import messagebox
 import traceback
+
+
+def _resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, works for dev and for PyInstaller bundle."""
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
 
 def main():
     """Main entry point for the application"""
@@ -21,8 +32,7 @@ def main():
         root = tk.Tk()
         
         # Set window icon
-        import os
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.ico")
+        icon_path = _resource_path(os.path.join("assets", "icon.ico"))
         if os.path.exists(icon_path):
             root.iconbitmap(icon_path)
         

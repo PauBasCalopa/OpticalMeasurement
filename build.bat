@@ -28,21 +28,16 @@ echo [3/4] Cleaning previous build artifacts...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 
-REM Build with PyInstaller
-echo [4/4] Building distributable...
+REM Build with PyInstaller (single-file standalone)
+echo [4/4] Building standalone executable...
 %PYINSTALLER% ^
     --name "OpticalMeasurement" ^
-    --onedir ^
+    --onefile ^
     --windowed ^
     --noconfirm ^
     --clean ^
     --icon "assets\icon.ico" ^
     --add-data "assets;assets" ^
-    --add-data "core;core" ^
-    --add-data "gui;gui" ^
-    --add-data "models;models" ^
-    --add-data "services;services" ^
-    --add-data "utils;utils" ^
     --hidden-import PIL ^
     --hidden-import PIL._tkinter_finder ^
     --hidden-import numpy ^
@@ -63,7 +58,7 @@ if exist OpticalMeasurement.spec del OpticalMeasurement.spec
 
 echo.
 echo === BUILD SUCCESSFUL ===
-echo Output: dist\OpticalMeasurement\
-echo Run:    dist\OpticalMeasurement\OpticalMeasurement.exe
+echo Output: dist\OpticalMeasurement.exe
+echo Run:    dist\OpticalMeasurement.exe
 echo.
 pause

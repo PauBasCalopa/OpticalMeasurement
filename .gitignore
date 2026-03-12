@@ -5,6 +5,7 @@ __pycache__/
 
 # PyInstaller
 build/
+dist/
 *.spec
 
 ## Ignore Visual Studio temporary files, build results, and

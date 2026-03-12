@@ -103,8 +103,9 @@ class OverlayRenderer:
             self.canvas.create_line(sx1, sy1, sx2, sy2, fill=color, width=1,
                                     dash=(2, 4), tags=(_GRID_TAG,))
             y += spacing
-        # Grid sits below measurement overlays
-        self.canvas.tag_lower(_GRID_TAG, _TAG)
+        # Grid sits below measurement overlays (only if overlay items exist)
+        if self.canvas.find_withtag(_TAG):
+            self.canvas.tag_lower(_GRID_TAG, _TAG)
 
     def clear_grid(self):
         """Remove grid overlay."""
@@ -134,8 +135,9 @@ class OverlayRenderer:
                     cx - 30, cy - 8, cx + 30, cy + 8,
                     outline="yellow", width=2,
                     tags=(_HIGHLIGHT_TAG,))
-        # Ensure highlights sit behind the actual overlays
-        self.canvas.tag_lower(_HIGHLIGHT_TAG, _TAG)
+        # Ensure highlights sit behind the actual overlays (only if overlay items exist)
+        if self.canvas.find_withtag(_TAG):
+            self.canvas.tag_lower(_HIGHLIGHT_TAG, _TAG)
 
     def clear_highlight(self):
         """Remove any highlight."""
