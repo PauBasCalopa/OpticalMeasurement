@@ -2,190 +2,176 @@
 
 A professional desktop application for precise measurements on digital images using a pixel-to-real-world calibration system.
 
-## ?? Features
+![Version](https://img.shields.io/badge/version-2.4-blue)
+![Python](https://img.shields.io/badge/python-3.8+-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
-- **?? Image Support**: Load common image formats (JPEG, PNG, BMP, TIFF, GIF)
-- **?? Calibration System**: Two-point calibration with any units
-- **?? Measurements**: 
-  - **Distance** (two points)
-  - **Radius** (three points on circle)
-  - **Angle** (three points)
-- **??? Professional Interface**: 
-  - Right-click pan + mouse wheel zoom
-  - Keyboard shortcuts for all tools
-  - Clean, toolbar-free design
-- **?? Export**: Save annotated images with measurements
+## Features
 
-## ?? Requirements
+### Measurement Tools (8 types)
 
-- **Python 3.8+**
-- **Required packages** (auto-install via requirements.txt):
-  ```bash
-  pip install -r requirements.txt
-  ```
+| Tool | Shortcut | Description |
+|------|----------|-------------|
+| Distance | `F5` | Two-point linear distance |
+| Radius | `F6` | Circle radius from 3 points on circumference |
+| Angle | `F7` | Angle at vertex from 3 points |
+| Two-Line Angle | `F8` | Angle between two lines (4 points) |
+| Polygon Area | `F9` | Area + perimeter from 3+ points (right-click to close) |
+| Coordinates | `F10` | Single point or difference between two points |
+| Point-to-Line | `F11` | Perpendicular distance from point to line |
+| Arc Length | `F12` | Arc length through 3 points |
 
-## ??? Installation
+### Interface
 
-1. **Clone or download** this repository
-2. **Navigate** to the project directory
-3. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. **Run the application**:
-   ```bash
-   python main.py
-   ```
+- **Toolbar** with icons for all tools and pan mode
+- **Minimap** showing full image thumbnail with viewport indicator
+- **Grid overlay** toggled with `G`
+- **Brightness/Contrast** sliders in the sidebar
+- **Measurement panel** with selection, properties, and highlighting
+- **Overlay visibility** toggle with `F2`
+- **Undo/Redo** support (`Ctrl+Z` / `Ctrl+Y`)
 
-## ?? Usage
+### Calibration System
 
-### **?? Quick Start Workflow**
+Two-point calibration with any real-world unit:
 
-1. **?? Open Image**: `Ctrl+O` or File ? Open Image
-2. **?? Calibrate**: `F4` or Tools ? Calibration ? Click two points on known distance
-3. **?? Measure**: `F5` Distance | `F6` Radius | `F7` Angle
-4. **?? Export**: `Ctrl+E` or File ? Export Image
+1. Select Calibration tool (`F4`)
+2. Click two points on a known distance
+3. Enter the real distance and units
+4. All measurements display in those units
 
-### **??? Professional Mouse Controls**
+### Image and Export
 
-- **??? Left Click**: Use selected tool (calibration, measurements)
-- **??? Right Click + Drag**: Pan image (always available)
-- **??? Mouse Wheel**: Zoom in/out
-- **??? Double-Click**: Delete measurement from list
+- **Formats**: JPEG, PNG, BMP, TIFF, GIF
+- **Export** (`Ctrl+E`): Save annotated image with all measurement overlays rendered
+- **Zoom**: Mouse wheel or `Ctrl++` / `Ctrl+-`, fit with `Ctrl+0`, actual size with `Ctrl+1`
+- **Pan**: Right-click drag (always available) or `Space` for pan tool
 
-### **?? Keyboard Shortcuts**
+## Download
 
-#### **?? File Operations**
-- `Ctrl+O` - Open Image
-- `Ctrl+W` - Close Image  
-- `Ctrl+E` - Export Image
+**Standalone Windows executable** (no Python required):
 
-#### **??? View Controls**
-- `Ctrl++` - Zoom In
-- `Ctrl+-` - Zoom Out
-- `Ctrl+0` - Zoom to Fit
-- `Ctrl+1` - Actual Size
-- `Ctrl+R` - Reset View
-- `Space` - Pan Tool
+Go to [Releases](../../releases) and download `OpticalMeasurement.exe`
 
-#### **?? Measurement Tools**
-- `F4` - Calibration
-- `F5` - Distance Measurement
-- `F6` - Radius Measurement
-- `F7` - Angle Measurement
-- `Esc` - Reset Tools
+## Installation (from source)
 
-#### **?? Measurement Management**
-- `Delete` - Delete Selected
-- `Ctrl+Shift+C` - Clear All
+```bash
+git clone https://github.com/PauBasCalopa/OpticalMeasurement.git
+cd OpticalMeasurement
+pip install -r requirements.txt
+python main.py
+```
 
-### **?? Calibration System**
+### Build standalone .exe
 
-The "**bananas for scale**" philosophy - use any reference object:
+```bash
+build.bat
+```
 
-1. **Find a known distance** in your image
-2. **Click Calibrate** (`F4`) 
-3. **Click two points** on that known distance
-4. **Enter the real distance** (in any units you prefer)
-5. **All measurements** will now be in those same units
+Generates `dist/OpticalMeasurement.exe` — a single-file standalone executable.
 
-#### **?? Examples:**
-- Bolt diameter = 10mm ? All measurements in **mm**
-- Ruler marking = 2 inches ? All measurements in **inches**  
-- Coin diameter = 24.3mm ? All measurements in **mm**
+## Keyboard Shortcuts
 
-## ??? Technical Details
+### File
 
-### **?? Architecture**
-- **Built with**: Python, tkinter, Pillow, numpy
-- **Cross-platform**: Windows, macOS, Linux
-- **No internet required**: Fully offline operation
-- **High-res support**: Handles large images efficiently
+| Key | Action |
+|-----|--------|
+| `Ctrl+O` | Open Image |
+| `Ctrl+W` | Close Image |
+| `Ctrl+E` | Export Image |
 
-### **?? Current Status** ?
-This is the **Phase 1 MVP** with full functionality:
-- ? Image loading and display
-- ? Professional zoom and pan controls
-- ? Two-point calibration system
-- ? Distance measurement (two points)
-- ? Radius measurement (three-point method)
-- ? Angle measurement (three points)
-- ? Measurement management (delete, clear)
-- ? Image export with measurements
-- ? Professional user interface
+### Edit
 
-### **?? Future Enhancements**
-- Area measurements (polygon tool)
-- Point coordinates and coordinate differences
-- Point-to-line distance measurements
-- Arc length measurements
-- Undo/redo system
-- Enhanced export options (CSV data, PDF reports)
-- Overlay visibility controls
+| Key | Action |
+|-----|--------|
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` | Redo |
+| `Delete` | Delete Selected Measurement |
+| `Ctrl+Shift+C` | Clear All Measurements |
 
-## ?? Project Structure
+### View
+
+| Key | Action |
+|-----|--------|
+| `Ctrl++` | Zoom In |
+| `Ctrl+-` | Zoom Out |
+| `Ctrl+0` | Zoom to Fit |
+| `Ctrl+1` | Actual Size |
+| `Ctrl+R` | Reset View |
+| `Space` | Pan Tool |
+| `F2` | Toggle Overlays |
+| `G` | Toggle Grid |
+
+### Tools
+
+| Key | Action |
+|-----|--------|
+| `F4` | Calibration |
+| `F5` - `F12` | Measurement tools (see table above) |
+| `Esc` | Cancel / Reset tool |
+| `F1` | Show Keyboard Shortcuts |
+
+## Project Structure
 
 ```
 OpticalMeasurement/
-??? main.py                 # Application entry point
-??? requirements.txt        # Python dependencies
-??? README.md              # This file
-??? core/                  # Core functionality
-?   ??? app_state.py       # Application state management
-?   ??? image_manager.py   # Image loading and processing
-?   ??? measurement_engine.py # Measurement calculations
-??? gui/                   # User interface
-?   ??? main_window.py     # Main application window
-?   ??? canvas_widget.py   # Image canvas and interactions  
-?   ??? menus.py          # Menu system
-?   ??? dialogs.py        # Dialog windows
-??? models/               # Data models
-?   ??? image_data.py     # Image metadata
-?   ??? calibration_data.py # Calibration information
-?   ??? measurement_data.py # Measurement results
-??? utils/                # Utilities
-?   ??? math_utils.py     # Mathematical calculations
-??? tests/               # Test suite
-    ??? test_core_components.py
-    ??? test_integration.py
-    ??? test_manual.py
-    ??? test_math_utils.py
+├── main.py                    # Entry point
+├── build.bat                  # Standalone .exe build script
+├── requirements.txt           # Python dependencies
+├── assets/                    # Application icon
+├── core/
+│   ├── app_state.py           # Centralized state + undo/redo
+│   ├── image_manager.py       # Image loading, brightness/contrast
+│   └── measurement_engine.py  # Measurement calculations
+├── gui/
+│   ├── main_window.py         # Main application window
+│   ├── canvas_widget.py       # Image canvas display
+│   ├── toolbar.py             # Tool buttons with icons
+│   ├── minimap_widget.py      # Thumbnail viewport navigator
+│   ├── menus.py               # Menu bar + shortcuts
+│   ├── dialogs.py             # Dialog windows
+│   └── canvas/
+│       ├── event_manager.py   # Mouse/keyboard event handling
+│       ├── overlay_renderer.py# Measurement overlay rendering
+│       ├── tool_handler.py    # Tool activation/switching
+│       ├── calibration_handler.py
+│       └── tools/
+│           ├── base_tool.py   # Abstract tool base
+│           ├── measurement_tool.py
+│           ├── polygon_tool.py
+│           └── pan_tool.py
+├── models/
+│   ├── calibration_data.py    # Calibration scale factor
+│   ├── image_data.py          # Image metadata
+│   ├── measurement_data.py    # 8 measurement dataclasses
+│   └── view_state.py          # Zoom, pan, canvas/image sizes
+├── services/
+│   ├── coordinate_service.py  # Image <-> screen coordinate conversions
+│   └── export_service.py      # Image export with overlays
+├── utils/
+│   └── math_utils.py          # Geometric calculations
+└── tests/
+    ├── test_coordinate_service.py
+    └── test_undo_redo.py
 ```
 
-## ?? Testing
-
-Run the test suite to verify functionality:
+## Testing
 
 ```bash
-# Run all tests
 pytest tests/
-
-# Run specific test categories
-pytest tests/test_core_components.py
-pytest tests/test_math_utils.py
 ```
 
-## ?? Contributing
+## Technical Details
 
-1. **Fork** the repository
-2. **Create** a feature branch
-3. **Add** tests for new functionality  
-4. **Ensure** all tests pass
-5. **Submit** a pull request
+- **Built with**: Python, tkinter, Pillow, numpy
+- **Architecture**: MVC-inspired with centralized state, stateless coordinate service, and modular canvas tools
+- **No internet required**: Fully offline operation
+- **High-res support**: Handles large images efficiently
 
-## ?? License
+## License
 
 This project is open source. See LICENSE file for details.
 
-## ?? Support
-
-For issues, questions, or feature requests:
-- **Create an issue** in the project repository
-- **Check existing issues** for similar problems
-- **Provide details** about your system and steps to reproduce
-
 ---
 
-## ?? Professional Measurement Tool
-
-**Industry-standard mouse controls** � **Clean interface** � **Accurate measurements** � **Cross-platform**
+By Pau Bas Calopa &copy; 2026
