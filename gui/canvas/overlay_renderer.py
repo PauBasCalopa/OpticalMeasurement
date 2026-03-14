@@ -267,17 +267,45 @@ class OverlayRenderer:
             return
         c = _COLORS["coordinate"]
         cs = 5  # crosshair size
+        cal = self.canvas.measurement_engine.calibration
+        unit = "units" if (cal and cal.is_calibrated) else "px"
+        
+        # First point crosshair
         s1 = self._s(*m.points[0], vs)
         self._line(s1[0] - cs, s1[1], s1[0] + cs, s1[1], c, m)
         self._line(s1[0], s1[1] - cs, s1[0], s1[1] + cs, c, m)
-        self._text(s1[0] + 15, s1[1] - 15, self._label(m), c, m)
-
-        if (hasattr(m, 'coordinate_type') and m.coordinate_type == "difference"
-                and len(m.points) >= 2):
+        
+        if hasattr(m, 'coordinate_type') and m.coordinate_type == "difference" and len(m.points) >= 2:
+            # Second point crosshair
             s2 = self._s(*m.points[1], vs)
             self._line(s2[0] - cs, s2[1], s2[0] + cs, s2[1], c, m)
             self._line(s2[0], s2[1] - cs, s2[0], s2[1] + cs, c, m)
+            
+            # Dashed line between points
             self._line(*s1, *s2, c, m, width=1, dash=(5, 5))
+            
+            # Show coordinate at each point
+            x1, y1 = m.points[0]
+            x2, y2 = m.points[1]
+            if cal and cal.is_calibrated:
+                x1, y1 = cal.pixels_to_units(x1), cal.pixels_to_units(y1)
+                x2, y2 = cal.pixels_to_units(x2), cal.pixels_to_units(y2)
+            self._text(s1[0] + 10, s1[1] - 12, f"P1 ({x1:.1f}, {y1:.1f})", c, m)
+            self._text(s2[0] + 10, s2[1] - 12, f"P2 ({x2:.1f}, {y2:.1f})", c, m)
+            
+            # Show delta info at midpoint
+            mx = (s1[0] + s2[0]) // 2
+            my = (s1[1] + s2[1]) // 2
+            label = self._label(m)
+            parts = label.split(" | ")
+            if len(parts) == 2:
+                self._text(mx, my - 18, parts[0], c, m)  # Δx, Δy
+                self._text(mx, my - 6, parts[1], c, m)    # Dist
+            else:
+                self._text(mx, my - 10, label, c, m)
+        else:
+            # Single point — show coordinates next to crosshair
+            self._text(s1[0] + 15, s1[1] - 15, self._label(m), c, m)
 
     def _r_point_to_line(self, m, vs):
         if len(m.points) < 3:
@@ -304,13 +332,85 @@ class OverlayRenderer:
             return
         c = _COLORS["arc_length"]
         sp = [self._s(*p, vs) for p in m.points]
-        for i in range(len(sp) - 1):
-            self._line(*sp[i], *sp[i + 1], c, m, width=3)
-        for p in sp:
-            self._oval(*p, 2, c, m, fill=c, outline=c)
+        
+        # Draw actual arc curve if center is known
         if hasattr(m, 'center_point') and m.center_point:
+            import math
             sc = self._s(*m.center_point, vs)
-            self._oval(*sc, 2, c, m, fill=c, outline="white", width=1)
+            # Calculate screen radius
+            cal = self.canvas.measurement_engine.calibration
+            rpx = (m.radius / cal.scale_factor) if (cal and cal.is_calibrated and m.radius) else (m.radius or 0)
+            rs = rpx * vs.zoom
+            
+            # Draw smooth arc by computing points along the arc
+            angle1 = math.atan2(m.points[0][1] - m.center_point[1], m.points[0][0] - m.center_point[0])
+            angle2 = math.atan2(m.points[1][1] - m.center_point[1], m.points[1][0] - m.center_point[0])
+            angle3 = math.atan2(m.points[2][1] - m.center_point[1], m.points[2][0] - m.center_point[0])
+            
+            # Determine arc direction: p1 → p2 → p3
+            # Normalize angles to [0, 2*pi)
+            def norm(a):
+                return a % (2 * math.pi)
+            a1, a2, a3 = norm(angle1), norm(angle2), norm(angle3)
+            
+            # Check if going CCW from a1 through a2 to a3
+            def ccw_between(start, mid, end):
+                """Check if mid is between start and end going counter-clockwise."""
+                if start <= end:
+                    return start <= mid <= end
+                else:
+                    return mid >= start or mid <= end
+            
+            if ccw_between(a1, a2, a3):
+                # CCW from a1 to a3
+                if a3 >= a1:
+                    sweep = a3 - a1
+                else:
+                    sweep = (2 * math.pi - a1) + a3
+                start_angle = a1
+            else:
+                # CW from a1 to a3 → go the other way
+                if a1 >= a3:
+                    sweep = a1 - a3
+                else:
+                    sweep = (2 * math.pi - a3) + a1
+                start_angle = a3
+            
+            # Generate arc points in image coords, then convert to screen
+            num_segments = max(24, int(sweep / math.pi * 48))
+            arc_screen_pts = []
+            for i in range(num_segments + 1):
+                frac = i / num_segments
+                a = start_angle + frac * sweep
+                ix = m.center_point[0] + rpx * math.cos(a)
+                iy = m.center_point[1] + rpx * math.sin(a)
+                sx, sy = self._s(ix, iy, vs)
+                arc_screen_pts.extend([sx, sy])
+            
+            if len(arc_screen_pts) >= 4:
+                self.canvas.create_line(
+                    arc_screen_pts, fill=c, width=2,
+                    smooth=True, tags=self._tags(m))
+            
+            # Draw dashed radius line from center to first point
+            self._line(*sc, *sp[0], c, m, width=1, dash=(3, 3))
+            
+            # Center dot
+            self._oval(*sc, 3, c, m, fill=c, outline="white", width=1)
+        else:
+            # Fallback to straight lines (collinear case)
+            for i in range(len(sp) - 1):
+                self._line(*sp[i], *sp[i + 1], c, m, width=2)
+        
+        # Point markers
+        for i, p in enumerate(sp):
+            self._oval(*p, 3, c, m, fill=c, outline="white", width=1)
+        
+        # Multi-line label at centroid
         tx = sum(p[0] for p in sp) // len(sp)
         ty = sum(p[1] for p in sp) // len(sp)
-        self._text(tx, ty - 20, self._label(m), c, m)
+        label = self._label(m)
+        parts = label.split(" | ")
+        y_offset = -(len(parts) * 12) // 2
+        for i, part in enumerate(parts):
+            self._text(tx, ty + y_offset + i * 12, part, c, m)

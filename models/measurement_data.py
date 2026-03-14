@@ -124,6 +124,8 @@ class CoordinateMeasurement(MeasurementBase):
     """Point coordinate measurement"""
     
     coordinate_type: str = "single"  # "single" or "difference"
+    dx: Optional[float] = None
+    dy: Optional[float] = None
     
     def __post_init__(self):
         self.measurement_type = "coordinate"
@@ -167,6 +169,7 @@ class ArcLengthMeasurement(MeasurementBase):
     
     center_point: Optional[Tuple[float, float]] = None
     radius: Optional[float] = None
+    central_angle: Optional[float] = None  # in degrees
     
     def __post_init__(self):
         self.measurement_type = "arc_length"

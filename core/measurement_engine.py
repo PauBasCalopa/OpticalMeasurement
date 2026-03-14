@@ -120,29 +120,19 @@ class MeasurementEngine:
         measurement.coordinate_type = coord_type
         
         if coord_type == "single" and len(points) >= 1:
-            # Single point coordinates
-            x, y = points[0]
-            
-            # Convert to real-world units if calibrated
-            if self.calibration and self.calibration.is_calibrated:
-                # For coordinates, we might want to keep them as pixels
-                # or define a coordinate system origin
-                measurement.result = None  # Coordinates don't have a single result value
-            else:
-                measurement.result = None
+            measurement.result = None
                 
         elif coord_type == "difference" and len(points) >= 2:
-            # Coordinate differences
             dx = points[1][0] - points[0][0]
             dy = points[1][1] - points[0][1]
             
-            # Convert to real-world units if calibrated
             if self.calibration and self.calibration.is_calibrated:
-                dx_units = self.calibration.pixels_to_units(abs(dx))
-                dy_units = self.calibration.pixels_to_units(abs(dy))
-                # Store the distance as the result
-                measurement.result = calculate_distance((0, 0), (dx_units, dy_units))
+                measurement.dx = self.calibration.pixels_to_units(dx)
+                measurement.dy = self.calibration.pixels_to_units(dy)
+                measurement.result = calculate_distance((0, 0), (measurement.dx, measurement.dy))
             else:
+                measurement.dx = dx
+                measurement.dy = dy
                 measurement.result = calculate_distance((0, 0), (dx, dy))
         
         return measurement
@@ -173,22 +163,24 @@ class MeasurementEngine:
         measurement.points = [p1, p2, p3]
         
         try:
-            # Calculate arc length in pixels
             pixel_arc_length = calculate_arc_length(p1, p2, p3)
-            
-            # Also calculate center and radius for display
             center, radius = calculate_circle_center_radius(p1, p2, p3)
             measurement.center_point = center
             
+            # Calculate central angle in degrees
+            import math
+            angle1 = math.atan2(p1[1] - center[1], p1[0] - center[0])
+            angle3 = math.atan2(p3[1] - center[1], p3[0] - center[0])
+            central_angle = abs(angle3 - angle1)
+            if central_angle > math.pi:
+                central_angle = 2 * math.pi - central_angle
+            measurement.central_angle = math.degrees(central_angle)
+            
             if self.calibration and self.calibration.is_calibrated:
                 measurement.radius = self.calibration.pixels_to_units(radius)
-            else:
-                measurement.radius = radius
-            
-            # Convert arc length to real-world units if calibrated
-            if self.calibration and self.calibration.is_calibrated:
                 measurement.result = self.calibration.pixels_to_units(pixel_arc_length)
             else:
+                measurement.radius = radius
                 measurement.result = pixel_arc_length
                 
         except ValueError as e:
@@ -207,15 +199,29 @@ class MeasurementEngine:
     def format_measurement_result(self, measurement: MeasurementBase, 
                                 decimal_places: int = 2) -> str:
         """Format measurement result for display"""
+        # Coordinate single-point has result=None but still has useful display
+        if measurement.measurement_type == "coordinate":
+            return self._format_coordinate(measurement, decimal_places)
+        
         if measurement.result is None:
             return "N/A"
         
         # Format based on measurement type
-        if measurement.measurement_type in ["distance", "radius", "point_to_line", "arc_length"]:
+        if measurement.measurement_type in ["distance", "radius", "point_to_line"]:
             if self.calibration and self.calibration.is_calibrated:
                 return f"{measurement.result:.{decimal_places}f} units"
             else:
                 return f"{measurement.result:.{decimal_places}f} px"
+        
+        elif measurement.measurement_type == "arc_length":
+            unit = "units" if (self.calibration and self.calibration.is_calibrated) else "px"
+            arc_str = f"Arc: {measurement.result:.{decimal_places}f} {unit}"
+            parts = [arc_str]
+            if hasattr(measurement, 'radius') and measurement.radius is not None:
+                parts.append(f"R: {measurement.radius:.{decimal_places}f} {unit}")
+            if hasattr(measurement, 'central_angle') and measurement.central_angle is not None:
+                parts.append(f"\u03b8: {measurement.central_angle:.1f}\u00b0")
+            return " | ".join(parts)
                 
         elif measurement.measurement_type == "polygon_area":
             unit = "units" if (self.calibration and self.calibration.is_calibrated) else "px"
@@ -225,20 +231,24 @@ class MeasurementEngine:
                 
         elif measurement.measurement_type in ["angle", "two_line_angle"]:
             return f"{measurement.result:.{decimal_places}f} degrees"
-            
-        elif measurement.measurement_type == "coordinate":
-            if measurement.coordinate_type == "single" and len(measurement.points) > 0:
-                x, y = measurement.points[0]
-                if self.calibration and self.calibration.is_calibrated:
-                    x_units = self.calibration.pixels_to_units(x)
-                    y_units = self.calibration.pixels_to_units(y)
-                    return f"({x_units:.{decimal_places}f}, {y_units:.{decimal_places}f}) units"
-                else:
-                    return f"({x:.{decimal_places}f}, {y:.{decimal_places}f}) px"
-            elif measurement.coordinate_type == "difference":
-                return f"{measurement.result:.{decimal_places}f} {'units' if self.calibration and self.calibration.is_calibrated else 'px'}"
         
         return str(measurement.result)
+    
+    def _format_coordinate(self, measurement, decimal_places: int = 2) -> str:
+        """Format coordinate measurement result."""
+        unit = "units" if (self.calibration and self.calibration.is_calibrated) else "px"
+        if measurement.coordinate_type == "single" and len(measurement.points) > 0:
+            x, y = measurement.points[0]
+            if self.calibration and self.calibration.is_calibrated:
+                x = self.calibration.pixels_to_units(x)
+                y = self.calibration.pixels_to_units(y)
+            return f"({x:.{decimal_places}f}, {y:.{decimal_places}f}) {unit}"
+        elif measurement.coordinate_type == "difference" and len(measurement.points) >= 2:
+            dx = measurement.dx if measurement.dx is not None else 0
+            dy = measurement.dy if measurement.dy is not None else 0
+            dist = measurement.result if measurement.result is not None else 0
+            return f"\u0394x: {dx:.{decimal_places}f}, \u0394y: {dy:.{decimal_places}f} | Dist: {dist:.{decimal_places}f} {unit}"
+        return "N/A"
     
     def complete(self, tool_type: str, points: List[Tuple[float, float]]) -> Optional[MeasurementBase]:
         """Unified measurement completion — dispatches to the appropriate calculator.

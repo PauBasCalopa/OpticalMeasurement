@@ -151,14 +151,25 @@ class ExportService:
 
             if m.coordinate_type == "single":
                 coord_text = f"({x:.1f}, {y:.1f})"
-            elif m.coordinate_type == "difference" and i == 1:
-                dx = m.points[1][0] - m.points[0][0]
-                dy = m.points[1][1] - m.points[0][1]
-                coord_text = f"\u0394X: {dx:.1f}, \u0394Y: {dy:.1f}"
+            elif m.coordinate_type == "difference":
+                coord_text = f"P{i+1} ({x:.1f}, {y:.1f})"
             else:
                 coord_text = f"P{i+1}"
 
             self._draw_text_with_bg(draw, x + 15, y - 15, coord_text, font, "black", "yellow")
+        
+        # For difference mode, draw dashed line and delta info at midpoint
+        if m.coordinate_type == "difference" and len(m.points) >= 2:
+            draw.line([m.points[0], m.points[1]], fill="yellow", width=lw)
+            mx = (m.points[0][0] + m.points[1][0]) / 2
+            my = (m.points[0][1] + m.points[1][1]) / 2
+            label = self.measurement_engine.format_measurement_result(m)
+            parts = label.split(" | ")
+            if len(parts) == 2:
+                self._draw_text_with_bg(draw, mx, my - 12, parts[0], font, "black", "yellow")
+                self._draw_text_with_bg(draw, mx, my + 12, parts[1], font, "black", "yellow")
+            else:
+                self._draw_text_with_bg(draw, mx, my, label, font, "black", "yellow")
 
     def _draw_point_to_line(self, draw, m, lw, font):
         if len(m.points) < 3:
@@ -181,15 +192,79 @@ class ExportService:
     def _draw_arc_length(self, draw, m, lw, font):
         if len(m.points) < 3:
             return
+        # Draw point markers
         for pt in m.points:
             ps = lw * 2
             draw.ellipse([pt[0] - ps, pt[1] - ps, pt[0] + ps, pt[1] + ps],
                          fill="magenta", outline="white", width=1)
-        for i in range(len(m.points) - 1):
-            draw.line([m.points[i], m.points[i + 1]], fill="magenta", width=lw)
+        
+        # Draw arc curve if center is known
+        if hasattr(m, 'center_point') and m.center_point:
+            import math
+            from utils.math_utils import calculate_circle_center_radius
+            center = m.center_point
+            # Get pixel radius
+            cal = self.measurement_engine.calibration
+            rpx = (m.radius / cal.scale_factor) if (cal and cal.is_calibrated and m.radius) else (m.radius or 0)
+            
+            # Calculate angles
+            angle1 = math.atan2(m.points[0][1] - center[1], m.points[0][0] - center[0])
+            angle2 = math.atan2(m.points[1][1] - center[1], m.points[1][0] - center[0])
+            angle3 = math.atan2(m.points[2][1] - center[1], m.points[2][0] - center[0])
+            
+            def norm(a):
+                return a % (2 * math.pi)
+            a1, a2, a3 = norm(angle1), norm(angle2), norm(angle3)
+            
+            def ccw_between(start, mid, end):
+                if start <= end:
+                    return start <= mid <= end
+                else:
+                    return mid >= start or mid <= end
+            
+            if ccw_between(a1, a2, a3):
+                if a3 >= a1:
+                    sweep = a3 - a1
+                else:
+                    sweep = (2 * math.pi - a1) + a3
+                start_angle = a1
+            else:
+                if a1 >= a3:
+                    sweep = a1 - a3
+                else:
+                    sweep = (2 * math.pi - a3) + a1
+                start_angle = a3
+            
+            # Generate arc polyline
+            num_segments = max(24, int(sweep / math.pi * 48))
+            arc_pts = []
+            for i in range(num_segments + 1):
+                frac = i / num_segments
+                a = start_angle + frac * sweep
+                ix = center[0] + rpx * math.cos(a)
+                iy = center[1] + rpx * math.sin(a)
+                arc_pts.append((ix, iy))
+            
+            if len(arc_pts) >= 2:
+                draw.line(arc_pts, fill="magenta", width=lw, joint="curve")
+            
+            # Center dot
+            cs = lw
+            draw.ellipse([center[0] - cs, center[1] - cs, center[0] + cs, center[1] + cs],
+                         fill="magenta", outline="white", width=1)
+        else:
+            # Fallback: straight lines
+            for i in range(len(m.points) - 1):
+                draw.line([m.points[i], m.points[i + 1]], fill="magenta", width=lw)
+        
+        # Multi-line label
         cx = sum(p[0] for p in m.points) / len(m.points)
-        cy = sum(p[1] for p in m.points) / len(m.points) - 20
-        self._draw_label(draw, cx, cy, m, font, "magenta")
+        cy = sum(p[1] for p in m.points) / len(m.points)
+        label = self.measurement_engine.format_measurement_result(m)
+        parts = label.split(" | ")
+        y_offset = -(len(parts) * 14) // 2
+        for i, part in enumerate(parts):
+            self._draw_text_with_bg(draw, cx, cy + y_offset + i * 14, part, font, "magenta", "magenta")
 
     # --- Text helpers -------------------------------------------------------
 

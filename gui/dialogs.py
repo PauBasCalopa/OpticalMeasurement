@@ -187,7 +187,7 @@ class AboutDialog:
         title_label.pack(pady=(0, 10))
         
         # Version
-        version_label = ttk.Label(main_frame, text="Version 2.4")
+        version_label = ttk.Label(main_frame, text="Version 2.5")
         version_label.pack(pady=(0, 15))
         
         # Description - using simple text without bullet points to avoid encoding issues
@@ -223,7 +223,7 @@ class MeasurementPropertiesDialog:
         
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Measurement Properties")
-        self.dialog.geometry("400x300")
+        self.dialog.geometry("420x420")
         self.dialog.resizable(False, False)
         
         # Make dialog modal
@@ -283,15 +283,19 @@ class MeasurementPropertiesDialog:
         type_label = ttk.Label(info_frame, text=f"Type: {self.measurement.measurement_type.replace('_', ' ').title()}")
         type_label.pack(anchor=tk.W)
         
-        # Result
-        if self.measurement.result is not None:
-            result_label = ttk.Label(info_frame, text=f"Value: {self.measurement.result:.3f}")
-            result_label.pack(anchor=tk.W, pady=(5, 0))
+        # Type-specific details
+        self._add_measurement_details(info_frame)
         
         # Points count
         points_count = len(self.measurement.points)
         points_label = ttk.Label(info_frame, text=f"Points: {points_count}")
         points_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Point coordinates
+        for i, (px, py) in enumerate(self.measurement.points):
+            pt_label = ttk.Label(info_frame, text=f"  P{i+1}: ({px:.1f}, {py:.1f}) px",
+                                font=("TkDefaultFont", 8), foreground="#555")
+            pt_label.pack(anchor=tk.W)
         
         # Timestamp
         timestamp_str = self.measurement.timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -322,6 +326,66 @@ class MeasurementPropertiesDialog:
         # Bind keys
         self.dialog.bind("<Return>", lambda e: self.ok())
         self.dialog.bind("<Escape>", lambda e: self.cancel())
+    
+    def _add_measurement_details(self, parent_frame):
+        """Add type-specific measurement details to the info frame."""
+        m = self.measurement
+        mt = m.measurement_type
+        
+        if mt == "distance":
+            if m.result is not None:
+                ttk.Label(parent_frame, text=f"Distance: {m.result:.3f}").pack(anchor=tk.W, pady=(5, 0))
+        
+        elif mt == "radius":
+            if m.result is not None:
+                ttk.Label(parent_frame, text=f"Radius: {m.result:.3f}").pack(anchor=tk.W, pady=(5, 0))
+            if hasattr(m, 'center_point') and m.center_point:
+                cx, cy = m.center_point
+                ttk.Label(parent_frame, text=f"Center: ({cx:.1f}, {cy:.1f}) px").pack(anchor=tk.W, pady=(2, 0))
+        
+        elif mt in ("angle", "two_line_angle"):
+            if m.result is not None:
+                ttk.Label(parent_frame, text=f"Angle: {m.result:.3f}\u00b0").pack(anchor=tk.W, pady=(5, 0))
+        
+        elif mt == "polygon_area":
+            if m.result is not None:
+                ttk.Label(parent_frame, text=f"Area: {m.result:.3f}").pack(anchor=tk.W, pady=(5, 0))
+            if hasattr(m, 'perimeter') and m.perimeter is not None:
+                ttk.Label(parent_frame, text=f"Perimeter: {m.perimeter:.3f}").pack(anchor=tk.W, pady=(2, 0))
+        
+        elif mt == "coordinate":
+            coord_type = getattr(m, 'coordinate_type', 'single')
+            ttk.Label(parent_frame, text=f"Mode: {coord_type}").pack(anchor=tk.W, pady=(5, 0))
+            if coord_type == "single" and len(m.points) >= 1:
+                x, y = m.points[0]
+                ttk.Label(parent_frame, text=f"Coordinates: ({x:.2f}, {y:.2f}) px").pack(anchor=tk.W, pady=(2, 0))
+            elif coord_type == "difference" and len(m.points) >= 2:
+                dx = getattr(m, 'dx', None)
+                dy = getattr(m, 'dy', None)
+                if dx is not None and dy is not None:
+                    ttk.Label(parent_frame, text=f"\u0394x: {dx:.3f}").pack(anchor=tk.W, pady=(2, 0))
+                    ttk.Label(parent_frame, text=f"\u0394y: {dy:.3f}").pack(anchor=tk.W, pady=(2, 0))
+                if m.result is not None:
+                    ttk.Label(parent_frame, text=f"Distance: {m.result:.3f}").pack(anchor=tk.W, pady=(2, 0))
+        
+        elif mt == "point_to_line":
+            if m.result is not None:
+                ttk.Label(parent_frame, text=f"Distance: {m.result:.3f}").pack(anchor=tk.W, pady=(5, 0))
+        
+        elif mt == "arc_length":
+            if m.result is not None:
+                ttk.Label(parent_frame, text=f"Arc Length: {m.result:.3f}").pack(anchor=tk.W, pady=(5, 0))
+            if hasattr(m, 'radius') and m.radius is not None:
+                ttk.Label(parent_frame, text=f"Radius: {m.radius:.3f}").pack(anchor=tk.W, pady=(2, 0))
+            if hasattr(m, 'central_angle') and m.central_angle is not None:
+                ttk.Label(parent_frame, text=f"Central Angle: {m.central_angle:.2f}\u00b0").pack(anchor=tk.W, pady=(2, 0))
+            if hasattr(m, 'center_point') and m.center_point:
+                cx, cy = m.center_point
+                ttk.Label(parent_frame, text=f"Center: ({cx:.1f}, {cy:.1f}) px").pack(anchor=tk.W, pady=(2, 0))
+        
+        else:
+            if m.result is not None:
+                ttk.Label(parent_frame, text=f"Value: {m.result:.3f}").pack(anchor=tk.W, pady=(5, 0))
     
     def ok(self):
         """Handle OK button"""

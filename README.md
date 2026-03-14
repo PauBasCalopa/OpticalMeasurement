@@ -2,7 +2,7 @@
 
 A professional desktop application for precise measurements on digital images using a pixel-to-real-world calibration system.
 
-![Version](https://img.shields.io/badge/version-2.4-blue)
+![Version](https://img.shields.io/badge/version-2.5-blue)
 ![Python](https://img.shields.io/badge/python-3.8+-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 

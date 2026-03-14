@@ -126,12 +126,7 @@ class OpticalMeasurementApp:
         )
         self.calibration_info_label.pack(pady=2)
         
-        # Calibration button (single button, no reset needed)
-        ttk.Button(
-            self.calibration_frame, 
-            text="Calibrate", 
-            command=self.start_calibration
-        ).pack(pady=5)
+        # Note: Use toolbar icon or F4 to calibrate
         
         # Image Adjustments frame
         self.adjustments_frame = ttk.LabelFrame(self.sidebar_frame, text="Image Adjustments")

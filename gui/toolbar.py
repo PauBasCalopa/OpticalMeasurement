@@ -2,11 +2,13 @@
 Toolbar Widget
 
 Visual toolbar with icon buttons for quick access to measurement tools.
-Icons are drawn using tkinter Canvas shapes — no external image dependencies.
+Icons are loaded from PNG files in assets/icons/ with fallback to drawn shapes.
 """
 
 import tkinter as tk
 from tkinter import ttk
+from pathlib import Path
+from PIL import Image, ImageTk
 
 
 # Tool definitions: (tool_name, label, shortcut, icon_drawer)
@@ -37,7 +39,28 @@ class ToolBar(ttk.Frame):
         self.app = app
         self.buttons: dict[str, tk.Canvas] = {}
         self.active_tool: str = "pan"
+        self.icon_images: dict[str, ImageTk.PhotoImage] = {}  # Keep references
+        self._load_icons()
         self._build()
+    
+    def _load_icons(self):
+        """Load PNG icons from assets/icons/ folder."""
+        icon_dir = Path(__file__).parent.parent / "assets" / "icons"
+        icon_size = (_BTN_SIZE - 2 * _ICON_PAD, _BTN_SIZE - 2 * _ICON_PAD)
+        
+        for tool_name, _, _ in _TOOLS:
+            if tool_name.startswith("sep"):
+                continue
+            
+            icon_path = icon_dir / f"{tool_name}.png"
+            if icon_path.exists():
+                try:
+                    img = Image.open(icon_path)
+                    img = img.resize(icon_size, Image.Resampling.LANCZOS)
+                    self.icon_images[tool_name] = ImageTk.PhotoImage(img)
+                except Exception as e:
+                    print(f"Warning: Could not load icon {icon_path}: {e}")
+                    # Will use fallback drawing
 
     def _build(self):
         for tool_name, label, shortcut in _TOOLS:
@@ -67,10 +90,17 @@ class ToolBar(ttk.Frame):
         self._highlight("pan")
 
     # ------------------------------------------------------------------
-    # Icon drawing (simple geometric shapes)
+    # Icon drawing (uses PNG images when available, fallback to shapes)
     # ------------------------------------------------------------------
 
     def _draw_icon(self, c: tk.Canvas, tool: str):
+        # Try to use loaded PNG image first
+        if tool in self.icon_images:
+            mid = _BTN_SIZE // 2
+            c.create_image(mid, mid, image=self.icon_images[tool])
+            return
+        
+        # Fallback to geometric shapes if image not found
         s = _BTN_SIZE
         p = _ICON_PAD
         mid = s // 2

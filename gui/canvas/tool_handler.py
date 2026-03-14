@@ -88,7 +88,7 @@ class ToolHandler:
             self.current_tool.handle_release()
     
     def handle_right_click(self, event) -> bool:
-        """Handle right-click. Returns True if consumed (e.g., polygon completion)."""
+        """Handle right-click. Returns True if consumed (e.g., polygon completion, coordinate single)."""
         if self.canvas.current_tool == "polygon_area":
             tool = self.tools.get("polygon_area")
             if tool:
@@ -96,6 +96,10 @@ class ToolHandler:
                 if result == ToolResult.COMPLETE:
                     self._complete_measurement()
                     return True
+        elif self.canvas.current_tool == "coordinate" and len(self.temp_points) >= 1:
+            # Right-click completes coordinate with current points (single-point mode)
+            self._complete_measurement()
+            return True
         return False
     
     def cancel(self):
