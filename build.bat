@@ -4,6 +4,7 @@ REM  Optical Measurement Tool - Build Script
 REM  Creates a standalone distributable (.exe)
 REM ============================================
 
+set VERSION=2.5
 set VENV=.venv
 set PYTHON=%VENV%\Scripts\python.exe
 set PYINSTALLER=%VENV%\Scripts\pyinstaller.exe
@@ -31,12 +32,13 @@ if exist dist rmdir /s /q dist
 REM Build with PyInstaller (single-file standalone)
 echo [4/4] Building standalone executable...
 %PYINSTALLER% ^
-    --name "OpticalMeasurement" ^
+    --name "OpticalMeasurement_V%VERSION%" ^
     --onefile ^
     --windowed ^
     --noconfirm ^
     --clean ^
     --icon "assets\icon.ico" ^
+    --version-file "version_info.py" ^
     --add-data "assets;assets" ^
     --hidden-import PIL ^
     --hidden-import PIL._tkinter_finder ^
@@ -58,7 +60,7 @@ if exist OpticalMeasurement.spec del OpticalMeasurement.spec
 
 echo.
 echo === BUILD SUCCESSFUL ===
-echo Output: dist\OpticalMeasurement.exe
-echo Run:    dist\OpticalMeasurement.exe
+echo Output: dist\OpticalMeasurement_V%VERSION%.exe
+echo Run:    dist\OpticalMeasurement_V%VERSION%.exe
 echo.
 pause

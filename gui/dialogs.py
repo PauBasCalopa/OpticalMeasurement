@@ -8,6 +8,12 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Optional
 
+APP_NAME = "Optical Measurement Tool"
+APP_VERSION = "2.5"
+APP_AUTHOR = "Pau Bas Calopa"
+APP_YEAR = "2026"
+APP_LICENSE = "MIT License"
+
 class CalibrationDialog:
     """Dialog for calibration distance input"""
     
@@ -181,20 +187,19 @@ class AboutDialog:
         # Title
         title_label = ttk.Label(
             main_frame,
-            text="Optical Measurement Tool",
+            text=APP_NAME,
             font=("TkDefaultFont", 16, "bold")
         )
         title_label.pack(pady=(0, 10))
         
         # Version
-        version_label = ttk.Label(main_frame, text="Version 2.5")
+        version_label = ttk.Label(main_frame, text=f"Version {APP_VERSION}")
         version_label.pack(pady=(0, 15))
         
-        # Description - using simple text without bullet points to avoid encoding issues
-        description = """A desktop application for precise measurements on digital images.
-
-By: Pau Bas Calopa (C) 2026.
-Licensed under the MIT License."""
+        # Description
+        description = (f"A desktop application for precise measurements on digital images.\n\n"
+                       f"By: {APP_AUTHOR} (C) {APP_YEAR}.\n"
+                       f"Licensed under the {APP_LICENSE}.")
         
         description_label = ttk.Label(
             main_frame, 
